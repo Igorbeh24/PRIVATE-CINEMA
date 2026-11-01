@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
@@ -25,20 +24,12 @@ const SCREEN_HEIGHT = 7.0;
 
 const SEAT_CONFIG = {
   total: 12,
-
-  // Uma única fileira
   columns: 12,
-
-  // Posição da primeira cadeira
   startX: 6.6,
   startY: 2.65,
   startZ: -3.15,
-
-  // Distância entre cada cadeira
   columnSpacing: 1.35,
-
   showNumbers: true,
-
   markerHeight: 0.8,
   markerSize: 0.38
 };
@@ -216,6 +207,7 @@ let videoTexture = null;
 let embeddedObject = null;
 let localObjectUrl = null;
 
+let currentSeat = 1;
 let yaw = Math.PI / 2;
 
 let pitch = Math.atan2(
@@ -270,7 +262,10 @@ function updateCamera() {
 }
 
 function setCameraToSeat(seatNumber) {
-  const pos = SEAT_POSITIONS[seatNumber - 1] || CAMERA_START;
+  const safeSeat = Math.max(1, Math.min(MAX_SEATS, Number(seatNumber) || 1));
+  currentSeat = safeSeat;
+
+  const pos = SEAT_POSITIONS[safeSeat - 1] || CAMERA_START;
 
   camera.position.copy(pos);
 
@@ -284,6 +279,166 @@ function setCameraToSeat(seatNumber) {
   );
 
   updateCamera();
+  updateSeatMenuSelection();
+}
+
+// ======================================================
+// SELETOR PROVISÓRIO DE ASSENTOS
+// ======================================================
+
+function createSeatSwitcher() {
+  if (document.getElementById('seat-menu')) return;
+
+  const style = document.createElement('style');
+  style.id = 'seat-menu-styles';
+  style.textContent = `
+    #seat-menu {
+      position: fixed;
+      right: 28px;
+      bottom: 28px;
+      z-index: 10000;
+      font-family: 'Manrope', sans-serif;
+      pointer-events: auto;
+    }
+    #seat-menu-toggle {
+      border: 1px solid #718282;
+      border-radius: 7px;
+      padding: 13px 18px;
+      background: rgba(17, 19, 19, .96);
+      color: #b8d8d8;
+      font: 600 10px 'Manrope', sans-serif;
+      letter-spacing: 1.7px;
+      cursor: pointer;
+      transition: .2s ease;
+    }
+    #seat-menu-toggle:hover {
+      background: #b8d8d8;
+      color: #111313;
+    }
+    #seat-options {
+      display: none;
+      position: absolute;
+      right: 0;
+      bottom: 54px;
+      width: 244px;
+      padding: 17px;
+      border: 1px solid #536363;
+      border-radius: 9px;
+      background: rgba(17, 19, 19, .97);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .4);
+      backdrop-filter: blur(14px);
+    }
+    #seat-options.open { display: block; }
+    #seat-options-title {
+      margin: 0 0 14px;
+      color: #b8d8d8;
+      font: 600 10px 'Manrope', sans-serif;
+      letter-spacing: 1.8px;
+    }
+    #seat-list {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .seat-option {
+      min-height: 42px;
+      border: 1px solid #485454;
+      border-radius: 5px;
+      background: #252b2b;
+      color: #edf2f2;
+      font: 600 12px 'Manrope', sans-serif;
+      cursor: pointer;
+      transition: .18s ease;
+    }
+    .seat-option:hover {
+      border-color: #b8d8d8;
+      background: #394747;
+    }
+    .seat-option.active {
+      border-color: #b8d8d8;
+      background: #718282;
+      color: #fff;
+    }
+    @media (max-width: 600px) {
+      #seat-menu { right: 14px; bottom: 16px; }
+      #seat-options { width: 220px; }
+    }
+  `;
+
+  document.head.appendChild(style);
+
+  const root = document.createElement('div');
+  root.id = 'seat-menu';
+
+  const toggle = document.createElement('button');
+  toggle.id = 'seat-menu-toggle';
+  toggle.type = 'button';
+  toggle.textContent = 'TROCAR DE ASSENTO';
+
+  const options = document.createElement('div');
+  options.id = 'seat-options';
+
+  const title = document.createElement('p');
+  title.id = 'seat-options-title';
+  title.textContent = 'ESCOLHA SEU ASSENTO';
+
+  const list = document.createElement('div');
+  list.id = 'seat-list';
+
+  options.append(title, list);
+  root.append(toggle, options);
+  document.body.appendChild(root);
+
+  for (let index = 0; index < MAX_SEATS; index++) {
+    const seatNumber = index + 1;
+    const button = document.createElement('button');
+
+    button.type = 'button';
+    button.className = 'seat-option';
+    button.textContent = String(seatNumber).padStart(2, '0');
+    button.dataset.seat = String(seatNumber);
+
+    button.addEventListener('click', () => {
+      setCameraToSeat(seatNumber);
+      options.classList.remove('open');
+
+      if (entered && renderer.domElement.requestPointerLock) {
+        renderer.domElement.requestPointerLock();
+      }
+
+      showToast(`Câmera posicionada no assento ${String(seatNumber).padStart(2, '0')}.`);
+    });
+
+    list.appendChild(button);
+  }
+
+  toggle.addEventListener('click', () => {
+    const willOpen = !options.classList.contains('open');
+    options.classList.toggle('open', willOpen);
+
+    if (willOpen && document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+  });
+
+  document.addEventListener('click', event => {
+    if (!root.contains(event.target)) {
+      options.classList.remove('open');
+    }
+  });
+
+  updateSeatMenuSelection();
+}
+
+function updateSeatMenuSelection() {
+  const list = document.getElementById('seat-list');
+  if (!list) return;
+
+  list.querySelectorAll('.seat-option').forEach(button => {
+    const selected = Number(button.dataset.seat) === currentSeat;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
 }
 
 // ======================================================
@@ -516,6 +671,7 @@ async function loadVideoLink(raw, fromRemote = false) {
       }
 
       pendingSharedMediaUrl = null;
+
     } else {
       disposeCurrentVideo();
       makeEmbeddedScreen(parsed.src);
@@ -1457,4 +1613,5 @@ function animate() {
   cssRenderer.render(scene, camera);
 }
 
+createSeatSwitcher();
 animate();
