@@ -30,8 +30,8 @@ const SEAT_CONFIG = {
   columns: 12,
 
   // Posição da primeira cadeira
-  startX: 6.55,
-  startY: 2.8,
+  startX: 6.6,
+  startY: 2.7,
   startZ: -2.025,
 
   // Distância entre cada cadeira
