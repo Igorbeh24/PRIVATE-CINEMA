@@ -26,41 +26,30 @@ const SCREEN_HEIGHT = 7.0;
 const SEAT_CONFIG = {
   total: 12,
 
-  // Quantidade de cadeiras por fileira
-  columns: 4,
+  // Uma única fileira
+  columns: 12,
 
   // Posição da primeira cadeira
   startX: 6.55,
-  startY: 2.8,
+  startY: 2.65,
   startZ: -2.025,
 
-  // Distância entre as cadeiras
+  // Distância entre cada cadeira
   columnSpacing: 1.35,
 
-  // Distância entre as fileiras
-  rowSpacing: 1.05,
-
-  // Mostrar numeração no cenário
   showNumbers: true,
 
-  // Altura das marcações
   markerHeight: 0.8,
-
-  // Tamanho das marcações
   markerSize: 0.38
 };
 
 const MAX_SEATS = SEAT_CONFIG.total;
 
-// Gera automaticamente as posições dos assentos
 const SEAT_POSITIONS = Array.from({ length: MAX_SEATS }, (_, i) => {
-  const row = Math.floor(i / SEAT_CONFIG.columns);
-  const col = i % SEAT_CONFIG.columns;
-
   return new THREE.Vector3(
-    SEAT_CONFIG.startX - row * SEAT_CONFIG.rowSpacing,
+    SEAT_CONFIG.startX,
     SEAT_CONFIG.startY,
-    SEAT_CONFIG.startZ + col * SEAT_CONFIG.columnSpacing
+    SEAT_CONFIG.startZ + i * SEAT_CONFIG.columnSpacing
   );
 });
 
