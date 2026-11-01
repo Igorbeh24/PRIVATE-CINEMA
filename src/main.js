@@ -28,7 +28,7 @@ const SEAT_CONFIG = {
   startX: 6.6,
   startY: 2.65,
   startZ: -3.15,
-  columnSpacing: 1.35,
+  columnSpacing: 1.15,
   showNumbers: true,
   markerHeight: 0.8,
   markerSize: 0.38
