@@ -23,8 +23,8 @@ const SCREEN_HEIGHT = 7.0;
 // ======================================================
 
 const SEAT_CONFIG = {
-  total: 12,
-  columns: 12,
+  total: 13,
+  columns: 13,
   startX: 6.6,
   startY: 2.65,
   startZ: -3.15,
