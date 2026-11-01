@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#08090b" />
+    <title>PRIVATE CINEMA</title>
+  </head>
+  <body>
+    <div id="app">
+      <div id="scene"></div>
+      <div id="css3d"></div>
+
+      <header class="topbar">
+        <div class="brand"><span class="brand-mark">P</span><span>PRIVATE <b>CINEMA</b></span></div>
+        <div class="top-status"><span class="status-dot"></span> SALA PRIVADA</div>
+      </header>
+
+      <section class="welcome" id="welcome">
+        <div class="welcome-kicker">SUA SALA. SEU FILME.</div>
+        <h1>O cinema<br><em>começa aqui.</em></h1>
+        <p>Entre na sala, acomode-se e escolha o que assistir.</p>
+        <button class="primary-btn" id="enterBtn">ENTRAR NO CINEMA <span>↗</span></button>
+        <div class="welcome-note">EXPERIÊNCIA 3D INTERATIVA</div>
+      </section>
+
+      <div class="loading" id="loading">
+        <div class="loader"></div>
+        <span>PREPARANDO SUA SALA</span>
+      </div>
+
+      <div class="hint" id="hint">
+        <span class="mouse-icon">⌖</span>
+        <span>Clique na sala e mova o mouse para olhar ao redor</span>
+        <kbd>ESC</kbd> para liberar
+      </div>
+
+      <section class="player-panel" id="playerPanel">
+        <div class="panel-heading">
+          <div><span class="panel-eyebrow">SEU CINEMA PARTICULAR</span><h2>O que vamos assistir?</h2></div>
+          <button class="close-panel" id="closePanel" aria-label="Fechar">×</button>
+        </div>
+        <form id="videoForm">
+          <label for="videoUrl">LINK DO VÍDEO</label>
+          <div class="url-row">
+            <input id="videoUrl" type="url" placeholder="Cole um link do YouTube, Vimeo ou MP4..." autocomplete="off" />
+            <button type="submit" class="load-btn">CARREGAR</button>
+          </div>
+          <div class="or-line"><span>OU ESCOLHA UM ARQUIVO DO COMPUTADOR</span></div>
+          <label class="file-btn" for="videoFile"><span>＋</span> Selecionar vídeo MP4 / WebM</label>
+          <input id="videoFile" type="file" accept="video/mp4,video/webm,video/ogg" hidden />
+          <p class="form-message" id="formMessage">YouTube, Vimeo e links diretos de vídeo são aceitos. Alguns sites bloqueiam reprodução externa.</p>
+        </form>
+      </section>
+
+      <div class="bottom-controls" id="bottomControls">
+        <button class="control-btn" id="movieBtn"><span>▶</span> ESCOLHER VÍDEO</button>
+        <div class="now-playing" id="nowPlaying">NENHUM VÍDEO SELECIONADO</div>
+        <button class="control-btn icon-btn" id="fullscreenBtn" title="Tela cheia">⛶</button>
+      </div>
+
+      <div class="toast" id="toast"></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

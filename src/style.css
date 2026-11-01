@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  font-family: 'Manrope', sans-serif;
+  color: #f4f1eb;
+  background: #08090b;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+* { box-sizing: border-box; }
+html, body, #app { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+body { background: #08090b; }
+#app { position: relative; isolation: isolate; }
+#scene, #css3d { position: absolute; inset: 0; }
+#scene { z-index: 1; }
+#scene canvas { display: block; width: 100%; height: 100%; outline: none; }
+#css3d { z-index: 2; pointer-events: none; overflow: hidden; }
+#css3d iframe { border: 0; pointer-events: auto; background: #000; }
+.topbar {
+  position: absolute; z-index: 5; inset: 0 0 auto; height: 76px; padding: 0 4.2vw;
+  display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(180deg, rgba(5,6,8,.78), transparent);
+  pointer-events: none;
+}
+.brand { display:flex; align-items:center; gap:12px; letter-spacing:.19em; font-size:11px; font-weight:500; }
+.brand b { font-weight:800; }
+.brand-mark { width:27px; height:27px; display:grid; place-items:center; border:1px solid rgba(255,255,255,.6); font-family:'DM Mono'; font-size:13px; }
+.top-status, .welcome-kicker, .welcome-note, .panel-eyebrow, .player-panel label, .or-line, .control-btn, .now-playing, .hint, .loading { font-family:'DM Mono', monospace; letter-spacing:.12em; }
+.top-status { font-size:9px; color:#b9b9b9; display:flex; align-items:center; gap:9px; }
+.status-dot { width:6px; height:6px; border-radius:50%; background:#a9c8b1; box-shadow:0 0 10px #a9c8b1; }
+.welcome {
+  position:absolute; z-index:4; left:8vw; top:50%; transform:translateY(-43%); max-width:510px;
+  transition:opacity .7s ease, transform .7s ease; pointer-events:auto;
+}
+.welcome.hidden { opacity:0; transform:translateY(-35%); pointer-events:none; }
+.welcome-kicker { font-size:10px; color:#c6a77b; margin-bottom:24px; }
+.welcome h1 { font-size:clamp(48px,7vw,92px); line-height:.98; letter-spacing:-.075em; font-weight:500; margin:0; }
+.welcome h1 em { font-family:Georgia,serif; font-weight:400; color:#c6a77b; }
+.welcome p { color:#b8b8b8; font-size:13px; line-height:1.8; margin:25px 0 30px; max-width:340px; }
+.primary-btn, .load-btn {
+  border:0; background:#c6a77b; color:#111; font:700 10px 'DM Mono',monospace; letter-spacing:.12em;
+  padding:17px 22px; cursor:pointer; transition:background .2s, transform .2s;
+}
+.primary-btn:hover, .load-btn:hover { background:#e0c49b; transform:translateY(-2px); }
+.primary-btn span { margin-left:28px; font-size:16px; }
+.welcome-note { margin-top:28px; color:#777; font-size:8px; }
+.loading {
+  position:absolute; z-index:8; inset:0; display:flex; flex-direction:column; gap:15px;
+  align-items:center; justify-content:center; background:#08090b; color:#aaa; font-size:9px;
+  transition:opacity .5s;
+}
+.loading.done { opacity:0; pointer-events:none; }
+.loader { width:27px; height:27px; border:1px solid #444; border-top-color:#c6a77b; border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.hint {
+  position:absolute; z-index:5; bottom:100px; left:50%; transform:translateX(-50%);
+  display:flex; align-items:center; gap:12px; color:#ddd; font-size:9px;
+  background:rgba(8,9,11,.65); border:1px solid rgba(255,255,255,.12); padding:12px 16px;
+  opacity:0; transition:opacity .3s; pointer-events:none; white-space:nowrap;
+}
+.hint.visible { opacity:1; }
+.mouse-icon { font-size:18px; color:#c6a77b; }
+kbd { border:1px solid #666; border-radius:3px; padding:3px 6px; font:9px 'DM Mono'; color:#aaa; }
+.player-panel {
+  position:absolute; z-index:7; right:4vw; bottom:95px; width:min(420px,92vw);
+  padding:25px; background:rgba(12,13,15,.94); border:1px solid rgba(255,255,255,.13);
+  box-shadow:0 20px 70px rgba(0,0,0,.45); backdrop-filter:blur(18px);
+  opacity:0; transform:translateY(12px); pointer-events:none; transition:.25s;
+}
+.player-panel.open { opacity:1; transform:translateY(0); pointer-events:auto; }
+.panel-heading { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
+.panel-eyebrow { font-size:8px; color:#c6a77b; }
+.panel-heading h2 { margin:8px 0 0; font-size:21px; letter-spacing:-.04em; font-weight:500; }
+.close-panel { border:0; background:none; color:#aaa; font-size:25px; cursor:pointer; line-height:1; }
+.player-panel label { display:block; color:#aaa; font-size:8px; margin-bottom:9px; }
+.url-row { display:flex; gap:7px; }
+.url-row input {
+  min-width:0; flex:1; background:#191a1d; border:1px solid #343538; color:#fff; outline:none;
+  padding:13px 12px; font:11px 'Manrope',sans-serif;
+}
+.url-row input:focus { border-color:#c6a77b; }
+.url-row input::placeholder { color:#777; }
+.load-btn { padding:0 15px; font-size:8px; }
+.or-line { display:flex; align-items:center; gap:10px; color:#777; font-size:7px; margin:22px 0 15px; }
+.or-line:before, .or-line:after { content:''; height:1px; background:#303033; flex:1; }
+.file-btn { display:flex!important; align-items:center; gap:10px; padding:13px; border:1px dashed #555; color:#ddd!important; cursor:pointer; font:10px 'Manrope',sans-serif!important; letter-spacing:0!important; }
+.file-btn:hover { border-color:#c6a77b; }
+.file-btn span { color:#c6a77b; font-size:18px; }
+.form-message { color:#858585; font-size:10px; line-height:1.6; margin:14px 0 0; }
+.bottom-controls {
+  position:absolute; z-index:5; bottom:0; left:0; right:0; min-height:68px; padding:0 4.2vw;
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  background:linear-gradient(0deg,rgba(5,6,8,.9),rgba(5,6,8,.45)); border-top:1px solid rgba(255,255,255,.08);
+}
+.control-btn { background:transparent; border:1px solid rgba(255,255,255,.22); color:#eee; padding:11px 14px; font-size:8px; cursor:pointer; }
+.control-btn:hover { border-color:#c6a77b; color:#c6a77b; }
+.control-btn span { color:#c6a77b; margin-right:8px; }
+.icon-btn { font:20px 'Manrope'; padding:5px 12px; }
+.now-playing { font-size:8px; color:#999; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.toast {
+  position:absolute; z-index:10; top:90px; left:50%; transform:translate(-50%,-10px);
+  padding:12px 17px; background:#17181b; border:1px solid #444; color:#eee;
+  font:10px 'DM Mono'; opacity:0; pointer-events:none; transition:.25s;
+}
+.toast.show { opacity:1; transform:translate(-50%,0); }
+@media (max-width:650px) {
+  .topbar { height:60px; padding:0 20px; }
+  .top-status { font-size:7px; }
+  .welcome { left:8vw; right:8vw; }
+  .welcome h1 { font-size:56px; }
+  .welcome p { font-size:12px; }
+  .bottom-controls { padding:0 14px; min-height:62px; }
+  .control-btn { padding:10px 9px; font-size:7px; }
+  .now-playing { display:none; }
+  .hint { bottom:82px; font-size:8px; max-width:92vw; }
+  .player-panel { right:4vw; bottom:76px; padding:19px; }
+}
