@@ -1207,121 +1207,93 @@ async function publishPlayback(status, mediaUrl = undefined) {
 }
 
 async function applyRemoteRoomPlayback(room) {
+  if (!room || isHost()) return;
 
-  if (!room || isHost()) return;
+  const media = room.media_url;
 
-  const media = room.media_url;
+  if (!media) return;
 
-  if (media && media !== lastLoadedRemoteMedia) {
+  // Só carrega novamente se o anfitrião trocar o vídeo
+  if (media !== lastLoadedRemoteMedia) {
+    try {
+      const parsed = parseVideoLink(media);
 
-    try {
+      disposeCurrentVideo();
 
-      const parsed = parseVideoLink(media);
+      if (parsed.provider === 'file') {
+        isApplyingRemotePlayback = true;
 
-      if (parsed.provider === 'file') {
+        playDirectVideo(parsed.src, media, true);
 
-        isApplyingRemotePlayback = true;
+        setTimeout(() => {
+          isApplyingRemotePlayback = false;
+        }, 1200);
 
-        playDirectVideo(parsed.src, media, true);
+      } else if (
+        parsed.provider === 'youtube' ||
+        parsed.provider === 'vimeo'
+      ) {
+        // Cada participante abre o mesmo vídeo no próprio telão
+        makeEmbeddedScreen(parsed.src);
 
-        lastLoadedRemoteMedia = media;
+        nowPlaying.textContent = parsed.provider === 'youtube'
+          ? 'YOUTUBE NO TELÃO'
+          : 'VIMEO NO TELÃO';
+      }
 
-        setTimeout(() => {
+      lastLoadedRemoteMedia = media;
 
-          isApplyingRemotePlayback = false;
+    } catch (error) {
+      console.error('Erro ao carregar vídeo compartilhado:', error);
+      showToast('Não foi possível carregar o vídeo compartilhado.');
+      return;
+    }
+  }
 
-        }, 1200);
+  // Sincronização de reprodução para arquivos MP4/WebM/OGG
+  if (
+    !videoElement ||
+    !/\.(mp4|webm|ogg)(?:$|[?#])/i.test(media)
+  ) {
+    return;
+  }
 
-      } else {
+  const expected =
+    Number(room.playback_position || 0) +
+    (
+      room.playback_status === 'playing'
+        ? Math.max(
+            0,
+            (Date.now() - new Date(room.playback_updated_at).getTime()) / 1000
+          )
+        : 0
+    );
 
-        showToast('Este tipo de player incorporado não oferece sincronização automática nesta versão.');
+  isApplyingRemotePlayback = true;
 
-        lastLoadedRemoteMedia = media;
+  try {
+    if (
+      Number.isFinite(expected) &&
+      Math.abs(videoElement.currentTime - expected) > 1.5
+    ) {
+      videoElement.currentTime = expected;
+    }
 
-      }
+    if (room.playback_status === 'playing') {
+      await videoElement.play();
+    } else {
+      videoElement.pause();
+    }
 
-    } catch {
+  } catch (error) {
+    console.warn('Sincronização de vídeo:', error);
+  }
 
-      // URL ainda não é um formato reproduzível
+  setTimeout(() => {
+    isApplyingRemotePlayback = false;
+  }, 500);
 
-    }
-
-  }
-
-  if (
-
-    !videoElement ||
-
-    !media ||
-
-    !/\.(mp4|webm|ogg)(?:$|[?#])/i.test(media)
-
-  ) {
-
-    return;
-
-  }
-
-  const expected =
-
-    Number(room.playback_position || 0) +
-
-    (
-
-      room.playback_status === 'playing'
-
-        ? Math.max(
-
-            0,
-
-            (Date.now() - new Date(room.playback_updated_at).getTime()) / 1000
-
-          )
-
-        : 0
-
-    );
-
-  isApplyingRemotePlayback = true;
-
-  try {
-
-    if (
-
-      Number.isFinite(expected) &&
-
-      Math.abs(videoElement.currentTime - expected) > 1.5
-
-    ) {
-
-      videoElement.currentTime = expected;
-
-    }
-
-    if (room.playback_status === 'playing') {
-
-      await videoElement.play();
-
-    } else {
-
-      videoElement.pause();
-
-    }
-
-  } catch {
-
-    // O navegador pode exigir um clique inicial do convidado.
-
-  }
-
-  setTimeout(() => {
-
-    isApplyingRemotePlayback = false;
-
-  }, 500);
-
-  updatePlaybackUI();
-
+  updatePlaybackUI();
 }
 
 async function leaveRoom() {
