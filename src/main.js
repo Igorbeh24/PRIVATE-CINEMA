@@ -1475,8 +1475,8 @@ function updatePlaybackUI() {
   const hasDirectVideo = !!videoElement;
   const canControlSeek = hasDirectVideo && (!currentRoom || isHost());
 
-  button.enabled = !hasDirectVideo;
-  seek.enabled = !canControlSeek;
+  button.disabled = !hasDirectVideo;
+  seek.disabled = !canControlSeek;
 
   button.textContent =
     videoElement && !videoElement.paused
