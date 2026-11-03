@@ -1,1544 +1,2417 @@
-
 import * as THREE from 'three';
+
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
+
 import { supabase } from './lib/supabase.js';
+
 import './style.css';
 
+
+
 // ======================================================
+
 // CONFIGURAÇÕES GERAIS
+
 // ======================================================
+
+
 
 const MODEL_PATH = '/models/Cine.glb';
 
+
+
 const CAMERA_START = new THREE.Vector3(6.55, 2.65, 0);
+
 const LOOK_AT_START = new THREE.Vector3(-4.42, 3.88, 0);
 
+
+
 const SCREEN_NAME = 'Screen';
+
 const SCREEN_CENTER = new THREE.Vector3(-4.415, 3.8777, 0);
+
 const SCREEN_WIDTH = 12.65;
+
 const SCREEN_HEIGHT = 7.0;
 
+
+
 // ======================================================
+
 // CONFIGURAÇÃO DAS CADEIRAS
+
 // ======================================================
+
+
 
 const SEAT_CONFIG = {
-  total: 13,
+
+  total: 12,
+
+
+
   // Uma única fileira
-  columns: 13,
+
+  columns: 12,
+
+
+
   // Posição da primeira cadeira
+
   startX: 6.6,
+
   startY: 2.65,
+
   startZ: -3.15,
+
+
+
   // Distância entre cada cadeira
-  columnSpacing: 0.525,
+
+  columnSpacing: 1.35,
+
+
+
   showNumbers: true,
+
   markerHeight: 0.8,
+
   markerSize: 0.38
+
 };
 
-const MAX_SEATS = SEAT_CONFIG.total;
 
-const SEAT_POSITIONS = Array.from({ length: MAX_SEATS }, (_, i) => {
-  return new THREE.Vector3(
-    SEAT_CONFIG.startX,
-    SEAT_CONFIG.startY,
-    SEAT_CONFIG.startZ + i * SEAT_CONFIG.columnSpacing
-  );
-});
-
-const STUN_SERVERS = [
-  { urls: 'stun:stun.l.google.com:19302' }
-];
-
-const $ = (s) => document.querySelector(s);
-
-const app = $('#app');
-const sceneHost = $('#scene');
-const cssHost = $('#css3d');
-
-const loading = $('#loading');
-const welcome = $('#welcome');
-const hint = $('#hint');
-
-const panel = $('#playerPanel');
-const message = $('#formMessage');
-const nowPlaying = $('#nowPlaying');
-
-const toast = $('#toast');
 
 // ======================================================
-// CENA THREE.JS
-// ======================================================
 
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x08090b);
-
-const camera = new THREE.PerspectiveCamera(
-  62,
-  innerWidth / innerHeight,
-  0.05,
-  300
-);
-
-camera.position.copy(CAMERA_START);
-camera.rotation.order = 'YXZ';
-camera.lookAt(LOOK_AT_START);
-
-const renderer = new THREE.WebGLRenderer({
-  antialias: true,
-  alpha: false
-});
-
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.8));
-renderer.setSize(innerWidth, innerHeight);
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
-renderer.domElement.id = 'cinemaCanvas';
-renderer.domElement.setAttribute('aria-label', 'Sala de cinema 3D');
-
-sceneHost.appendChild(renderer.domElement);
-
-const cssRenderer = new CSS3DRenderer();
-
-cssRenderer.setSize(innerWidth, innerHeight);
-cssRenderer.domElement.style.position = 'absolute';
-cssRenderer.domElement.style.inset = '0';
-cssRenderer.domElement.style.pointerEvents = 'none';
-
-cssHost.appendChild(cssRenderer.domElement);
-
-scene.add(new THREE.HemisphereLight(0xb9c8df, 0x171014, 1.05));
-
-const softLight = new THREE.DirectionalLight(0xffe3c2, 1.05);
-softLight.position.set(1, 8, 4);
-scene.add(softLight);
+// ESTADO GLOBAL
 
 // ======================================================
-// MARCAÇÕES VISUAIS DAS CADEIRAS
-// ======================================================
 
-const seatMarkers = new THREE.Group();
-seatMarkers.name = 'SeatMarkers';
-scene.add(seatMarkers);
 
-function createSeatLabel(number, position) {
-  const canvas = document.createElement('canvas');
 
-  canvas.width = 512;
-  canvas.height = 160;
+let scene;
 
-  const ctx = canvas.getContext('2d');
+let camera;
 
-  ctx.fillStyle = 'rgba(8, 9, 11, 0.92)';
+let renderer;
 
-  ctx.beginPath();
-  ctx.roundRect(8, 8, 496, 144, 24);
-  ctx.fill();
+let cssRenderer;
 
-  ctx.strokeStyle = '#b8d8d8';
-  ctx.lineWidth = 6;
-  ctx.stroke();
+let controls;
 
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 75px Arial';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
 
-  ctx.fillText(
-    String(number).padStart(2, '0'),
-    256,
-    80
-  );
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+let videoElement;
 
-  const material = new THREE.SpriteMaterial({
-    map: texture,
-    transparent: true,
-    depthTest: false
-  });
+let videoTexture;
 
-  const sprite = new THREE.Sprite(material);
+let videoTextureSource;
 
-  sprite.position.copy(position);
-  sprite.position.y += SEAT_CONFIG.markerHeight;
+let screenMesh;
 
-  sprite.scale.set(
-    SEAT_CONFIG.markerSize * 2.5,
-    SEAT_CONFIG.markerSize * 0.8,
-    1
-  );
 
-  sprite.renderOrder = 999;
-
-  seatMarkers.add(sprite);
-
-  console.log(
-    `CADEIRA ${String(number).padStart(2, '0')}`,
-    `X: ${position.x.toFixed(3)}`,
-    `Y: ${position.y.toFixed(3)}`,
-    `Z: ${position.z.toFixed(3)}`
-  );
-}
-
-function updateSeatMarkers() {
-  seatMarkers.clear();
-
-  if (!SEAT_CONFIG.showNumbers) return;
-
-  SEAT_POSITIONS.forEach((position, index) => {
-    createSeatLabel(index + 1, position);
-  });
-
-  console.log('================================');
-  console.log('POSIÇÕES DE TODAS AS CADEIRAS');
-  console.log('================================');
-}
-
-// ======================================================
-// ESTADO DO SISTEMA
-// ======================================================
-
-let screenMesh = null;
-let originalScreenMaterial = null;
-
-let videoElement = null;
-let videoTexture = null;
-let embeddedObject = null;
-let localObjectUrl = null;
-
-let yaw = Math.PI / 2;
-
-let pitch = Math.atan2(
-  LOOK_AT_START.y - CAMERA_START.y,
-  Math.hypot(
-    LOOK_AT_START.x - CAMERA_START.x,
-    LOOK_AT_START.z - CAMERA_START.z
-  )
-);
-
-let entered = false;
 
 let currentRoom = null;
-let currentMember = null;
-let roomChannel = null;
 
-let roomMembers = [];
-let isApplyingRemotePlayback = false;
-let lastPlaybackWrite = 0;
-let lastLoadedRemoteMedia = null;
-let pendingSharedMediaUrl = null;
+let currentUser = null;
+
+let currentSeat = null;
+
+let isHost = false;
+
 let isSeeking = false;
 
-let localStream = null;
+let isApplyingRemotePlayback = false;
 
-const peers = new Map();
-const remoteAudio = new Map();
+
+
+let localObjectUrl = null;
+
+let remoteVideoUrl = null;
+
+let currentVideoUrl = null;
+
+
+
+let playbackDebounceTimer = null;
+
+let lastPlaybackPublish = 0;
+
+let lastRemotePlaybackUpdate = 0;
+
+
 
 let heartbeatTimer = null;
 
-// ======================================================
-// NOTIFICAÇÕES
-// ======================================================
+let roomRefreshTimer = null;
 
-function showToast(text) {
-  toast.textContent = text;
-  toast.classList.add('show');
+let presenceChannel = null;
 
-  clearTimeout(showToast.timer);
+let roomChannel = null;
 
-  showToast.timer = setTimeout(() => {
-    toast.classList.remove('show');
-  }, 3200);
-}
+let voiceChannel = null;
 
-// ======================================================
-// CÂMERA
-// ======================================================
 
-function updateCamera() {
-  camera.rotation.y = yaw;
-  camera.rotation.x = pitch;
-}
 
-function setCameraToSeat(seatNumber) {
-  const pos = SEAT_POSITIONS[seatNumber - 1] || CAMERA_START;
+let peerConnections = new Map();
 
-  camera.position.copy(pos);
+let localStream = null;
 
-  const dir = SCREEN_CENTER.clone().sub(pos).normalize();
 
-  yaw = Math.atan2(-dir.x, -dir.z);
 
-  pitch = Math.atan2(
-    dir.y,
-    Math.hypot(dir.x, dir.z)
-  );
+let seatMarkers = [];
 
-  updateCamera();
-}
+let seatPositions = [];
+
+
+
+let yaw = 0;
+
+let pitch = 0;
+
+let isPointerLocked = false;
+
+
+
+const $ = selector => document.querySelector(selector);
+
+const a$ = selector => document.querySelector(selector);
+
+
 
 // ======================================================
-// VÍDEO
+
+// ELEMENTOS DA INTERFACE
+
 // ======================================================
 
-function disposeCurrentVideo() {
-  if (videoElement) {
-    videoElement.pause();
-    videoElement.removeAttribute('src');
-    videoElement.load();
-    videoElement = null;
-  }
 
-  if (videoTexture) {
-    videoTexture.dispose();
-    videoTexture = null;
-  }
 
-  if (embeddedObject) {
-    scene.remove(embeddedObject);
-    embeddedObject.element.remove();
-    embeddedObject = null;
-  }
+const app = $('#app');
 
-  if (screenMesh && originalScreenMaterial) {
-    screenMesh.material = originalScreenMaterial;
-  }
-}
+const sceneContainer = $('#scene');
 
-function makeEmbeddedScreen(url) {
-  const frame = document.createElement('iframe');
+const css3dContainer = $('#css3d');
 
-  frame.width = '1920';
-  frame.height = '1080';
+const loadingElement = $('#loading');
 
-  frame.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
-  frame.allowFullscreen = true;
-  frame.referrerPolicy = 'strict-origin-when-cross-origin';
+const welcomeElement = $('#welcome');
 
-  frame.title = 'Vídeo no telão do cinema';
-  frame.src = url;
+const hintElement = $('#hint');
 
-  frame.style.cssText = 'width:1920px;height:1080px;border:0;background:#000';
+const playerPanel = $('#playerPanel');
 
-  embeddedObject = new CSS3DObject(frame);
+const playPauseBtn = $('#playPauseBtn');
 
-  embeddedObject.position.copy(SCREEN_CENTER);
-  embeddedObject.position.x += 0.012;
+const seekBar = $('#seekBar');
 
-  embeddedObject.rotation.y = Math.PI / 2;
 
-  embeddedObject.scale.set(
-    SCREEN_WIDTH / 1920,
-    SCREEN_HEIGHT / 1080,
-    1
-  );
 
-  scene.add(embeddedObject);
+// ======================================================
 
-  if (screenMesh) {
-    screenMesh.material = new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      side: THREE.DoubleSide
-    });
-  }
-}
+// INICIALIZAÇÃO
 
-function parseVideoLink(raw) {
-  let url;
+// ======================================================
+
+
+
+async function init() {
 
   try {
-    url = new URL(raw);
-  } catch {
-    throw new Error('Cole um endereço válido.');
-  }
 
-  const host = url.hostname.replace(/^www\./, '').toLowerCase();
+    scene = new THREE.Scene();
 
-  if (
-    host === 'youtu.be' ||
-    host.endsWith('youtube.com') ||
-    host.endsWith('youtube-nocookie.com')
-  ) {
-    let id = '';
+    scene.background = new THREE.Color(0x000000);
 
-    if (host === 'youtu.be') {
-      id = url.pathname.split('/').filter(Boolean)[0] || '';
-    } else if (url.pathname === '/watch') {
-      id = url.searchParams.get('v') || '';
-    } else if (url.pathname.startsWith('/embed/')) {
-      id = url.pathname.split('/')[2] || '';
-    } else if (url.pathname.startsWith('/shorts/')) {
-      id = url.pathname.split('/')[2] || '';
-    }
 
-    if (!/^[\w-]{6,}$/.test(id)) {
-      throw new Error('Não consegui identificar esse vídeo do YouTube.');
-    }
 
-    return {
-      provider: 'youtube',
-      src: `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&controls=1&rel=0&modestbranding=1`
-    };
-  }
+    camera = new THREE.PerspectiveCamera(
 
-  if (host === 'vimeo.com' || host.endsWith('.vimeo.com')) {
-    const match = url.pathname.match(/(\d+)/);
+      65,
 
-    if (!match) {
-      throw new Error('Não consegui identificar esse vídeo do Vimeo.');
-    }
+      window.innerWidth / window.innerHeight,
 
-    return {
-      provider: 'vimeo',
-      src: `https://player.vimeo.com/video/${match[1]}?autoplay=1&title=0&byline=0&portrait=0`
-    };
-  }
+      0.1,
 
-  if (/\.(mp4|webm|ogg)(?:$|[?#])/i.test(url.href)) {
-    return {
-      provider: 'file',
-      src: url.href
-    };
-  }
+      1000
 
-  throw new Error('Use YouTube, Vimeo ou um link direto .mp4, .webm ou .ogg.');
-}
+    );
 
-function playDirectVideo(src, title = 'VÍDEO EXTERNO', remote = false) {
-  disposeCurrentVideo();
 
-  const video = document.createElement('video');
 
-  video.src = src;
-  video.crossOrigin = 'anonymous';
-  video.loop = false;
-  video.muted = false;
-  video.playsInline = true;
-  video.preload = 'auto';
+    camera.position.copy(CAMERA_START);
 
-  video.addEventListener('error', () => {
-    showToast('Não foi possível carregar o vídeo. Verifique se o link é público e permite reprodução externa.');
-  }, { once: true });
+    camera.lookAt(LOOK_AT_START);
 
-  videoElement = video;
 
-  videoTexture = new THREE.VideoTexture(videoTextureSource(video));
-  videoTexture.colorSpace = THREE.SRGBColorSpace;
-  videoTexture.minFilter = THREE.LinearFilter;
-  videoTexture.magFilter = THREE.LinearFilter;
-  videoTexture.generateMipmaps = false;
 
-  if (screenMesh) {
-    screenMesh.material = new THREE.MeshBasicMaterial({
-      map: videoTexture,
-      side: THREE.DoubleSide,
-      toneMapped: false
-    });
-  }
+    yaw = Math.atan2(
 
-  video.addEventListener('play', updatePlaybackUI);
-  video.addEventListener('pause', updatePlaybackUI);
-  video.addEventListener('seeked', updatePlaybackUI);
-  video.addEventListener('loadedmetadata', updatePlaybackUI);
-  video.addEventListener('timeupdate', updatePlaybackUI);
+      LOOK_AT_START.x - CAMERA_START.x,
 
-  video.play()
-    .then(() => {
-      if (!remote) showToast('Vídeo carregado no telão.');
-    })
-    .catch(() => {
-      if (remote) {
-        showToast('Clique em reproduzir para liberar o áudio neste navegador.');
-      } else {
-        showToast('Clique em reproduzir para iniciar o vídeo.');
-      }
+      LOOK_AT_START.z - CAMERA_START.z
+
+    );
+
+
+
+    pitch = Math.atan2(
+
+      LOOK_AT_START.y - CAMERA_START.y,
+
+      Math.sqrt(
+
+        Math.pow(LOOK_AT_START.x - CAMERA_START.x, 2) +
+
+        Math.pow(LOOK_AT_START.z - CAMERA_START.z, 2)
+
+      )
+
+    );
+
+
+
+    renderer = new THREE.WebGLRenderer({
+
+      antialias: true,
+
+      alpha: false
+
     });
 
-  nowPlaying.textContent = title.toUpperCase();
-}
 
-function videoTextureSource(video) {
-  return video;
-}
 
-async function loadVideoLink(raw, fromRemote = false) {
-  try {
-    const parsed = parseVideoLink(raw.trim());
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-    if (currentRoom && !isHost() && !fromRemote) {
-      throw new Error('Somente o anfitrião pode escolher o vídeo.');
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+
+
+    sceneContainer.appendChild(renderer.domElement);
+
+
+
+    cssRenderer = new CSS3DRenderer();
+
+    cssRenderer.setSize(window.innerWidth, window.innerHeight);
+
+    css3dContainer.appendChild(cssRenderer.domElement);
+
+
+
+    setupLighting();
+
+    setupControls();
+
+    setupEvents();
+
+
+
+    await loadCinemaModel();
+
+
+
+    createVideoScreen();
+
+    createSeatMarkers();
+
+
+
+    if (loadingElement) {
+
+      loadingElement.style.display = 'none';
+
     }
 
-    if (parsed.provider === 'file') {
-      // O link precisa ser público e acessível pelos navegadores dos convidados.
-      // Arquivos locais selecionados pelo computador não são compartilháveis.
-      pendingSharedMediaUrl = currentRoom && !fromRemote ? parsed.src : null;
 
-      playDirectVideo(parsed.src, raw, fromRemote);
 
-      if (currentRoom && !fromRemote) {
-        await publishPlayback('playing', parsed.src, true);
-      }
+    animate();
 
-      pendingSharedMediaUrl = null;
 
-    } else {
-      disposeCurrentVideo();
-      makeEmbeddedScreen(parsed.src);
-
-      nowPlaying.textContent = parsed.provider === 'youtube'
-        ? 'YOUTUBE NO TELÃO'
-        : 'VIMEO NO TELÃO';
-
-      if (currentRoom && !fromRemote) {
-        // O link é distribuído para quem já está na sala e para quem entrar depois.
-        await publishPlayback('playing', raw, true);
-
-        showToast('Link enviado para a sala. YouTube/Vimeo ainda não sincronizam pausa e posição.');
-      } else {
-        showToast('Player carregado no telão.');
-      }
-    }
-
-    panel.classList.remove('open');
-    message.textContent = 'Vídeo carregado.';
 
   } catch (error) {
-    pendingSharedMediaUrl = null;
-    message.textContent = error.message;
-    showToast(error.message);
+
+    console.error('Erro ao inicializar o cinema:', error);
+
+    showMessage('Não foi possível carregar o cinema.');
+
   }
+
 }
 
-function loadLocalFile(file) {
-  if (!file) return;
 
-  if (currentRoom) {
-    showToast('Arquivos locais não podem ser compartilhados. Use um link público MP4/WebM.');
-    return;
-  }
-
-  if (!file.type.startsWith('video/')) {
-    showToast('Escolha um arquivo de vídeo.');
-    return;
-  }
-
-  if (localObjectUrl) {
-    URL.revokeObjectURL(localObjectUrl);
-  }
-
-  localObjectUrl = URL.createObjectURL(file);
-
-  playDirectVideo(localObjectUrl, file.name);
-
-  panel.classList.remove('open');
-  message.textContent = 'Arquivo local carregado nesta sessão.';
-}
 
 // ======================================================
-// MULTIPLAYER / SUPABASE
+
+// ILUMINAÇÃO
+
 // ======================================================
 
-function isHost() {
-  return !!currentRoom && currentRoom.host_id === currentMember?.user_id;
+
+
+function setupLighting() {
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+
+  scene.add(ambientLight);
+
+
+
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+
+  directionalLight.position.set(5, 10, 5);
+
+  scene.add(directionalLight);
+
+
+
+  const pointLight = new THREE.PointLight(0xffffff, 2, 30);
+
+  pointLight.position.set(0, 5, 0);
+
+  scene.add(pointLight);
+
 }
 
-function setRoomStatus(text) {
-  $('#roomStatus').textContent = text;
-}
 
-function renderMembers() {
-  const list = $('#memberList');
 
-  if (!list) return;
+// ======================================================
 
-  list.innerHTML = '';
+// CONTROLES DA CÂMERA
 
-  roomMembers.forEach(member => {
-    const li = document.createElement('li');
+// ======================================================
 
-    const name = document.createElement('span');
 
-    name.textContent = member.display_name +
-      (member.user_id === currentRoom?.host_id ? ' · anfitrião' : '');
 
-    const seat = document.createElement('small');
+function setupControls() {
 
-    seat.textContent = `ASSENTO ${member.seat_number}`;
+  renderer.domElement.addEventListener('click', () => {
 
-    li.append(name, seat);
-    list.appendChild(li);
-  });
+    if (!isPointerLocked) {
 
-  $('#roomCount').textContent =
-    `${roomMembers.length}/${currentRoom?.max_seats || 0} PARTICIPANTES`;
+      renderer.domElement.requestPointerLock?.();
 
-  updatePlaybackUI();
-
-  $('#hostControls').hidden = !isHost();
-
-  $('#roomCodeDisplay').textContent = currentRoom?.code || '------';
-}
-
-async function ensureAuth() {
-  let { data: { session }, error } = await supabase.auth.getSession();
-
-  if (error) throw error;
-
-  if (!session) {
-    const result = await supabase.auth.signInAnonymously();
-
-    if (result.error) throw result.error;
-  }
-
-  const { data } = await supabase.auth.getUser();
-
-  return data.user;
-}
-
-async function createRoom() {
-  try {
-    await ensureAuth();
-
-    const name = $('#displayName').value.trim() || 'Anfitrião';
-
-    const { data, error } = await supabase.rpc('create_room', {
-      p_name: $('#roomName').value.trim() || 'Cinema Privado',
-      p_max_seats: Number($('#maxSeats').value) || 12
-    });
-
-    if (error) throw error;
-
-    await enterRoom(data.room, data.member);
-
-    showToast(`Sala ${data.room.code} criada!`);
-
-  } catch (e) {
-    showToast(e.message || 'Não foi possível criar a sala.');
-  }
-}
-
-async function joinRoom() {
-  try {
-    await ensureAuth();
-
-    const code = $('#joinCode').value.trim().toUpperCase();
-
-    const name = $('#displayName').value.trim() || 'Visitante';
-
-    const seat = $('#seatChoice').value
-      ? Number($('#seatChoice').value)
-      : null;
-
-    if (!code) {
-      throw new Error('Digite o código da sala.');
     }
 
-    const { data, error } = await supabase.rpc('join_room', {
-      p_code: code,
-      p_display_name: name,
-      p_seat_number: seat
-    });
-
-    if (error) throw error;
-
-    await enterRoom(data.room, data.member);
-
-    showToast(`Você entrou na sala ${data.room.code}.`);
-
-  } catch (e) {
-    showToast(e.message || 'Não foi possível entrar na sala.');
-  }
-}
-
-async function enterRoom(room, member) {
-  currentRoom = room;
-  currentMember = member;
-
-  setCameraToSeat(member.seat_number);
-
-  $('#roomGate').hidden = true;
-  $('#roomHud').hidden = false;
-
-  $('#roomRole').textContent = isHost() ? 'ANFITRIÃO' : 'CONVIDADO';
-
-  $('#leaveRoomBtn').disabled = false;
-
-  // Busca o estado mais recente antes de iniciar a sincronização.
-  await refreshRoomState();
-
-  await subscribeRoom();
-
-  heartbeatTimer = setInterval(() => {
-    supabase.rpc('room_heartbeat');
-  }, 25000);
-
-  $('#roomHud').classList.add('visible');
-
-  // Quem entrar depois recebe o vídeo e a posição atual.
-  if (currentRoom.media_url) {
-    await applyRemoteRoomPlayback(currentRoom);
-  }
-}
-
-async function refreshRoomState() {
-  const { data, error } = await supabase.rpc('get_room_state', {
-    p_code: currentRoom.code
   });
 
-  if (error) throw error;
 
-  currentRoom = data.room;
-  roomMembers = data.members || [];
 
-  renderMembers();
-}
+  document.addEventListener('pointerlockchange', () => {
 
-async function subscribeRoom() {
-  if (roomChannel) {
-    await supabase.removeChannel(roomChannel);
-  }
+    isPointerLocked = document.pointerLockElement === renderer.domElement;
 
-  roomChannel = supabase.channel(`cinema-${currentRoom.id}`, {
-    config: {
-      presence: { key: currentMember.user_id },
-      broadcast: { self: false }
-    }
   });
 
-  roomChannel
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'room_members',
-        filter: `room_id=eq.${currentRoom.id}`
-      },
-      async () => {
-        await refreshRoomState();
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'rooms',
-        filter: `id=eq.${currentRoom.id}`
-      },
-      payload => {
-        currentRoom = payload.new;
 
-        if (!isHost()) {
-          applyRemoteRoomPlayback(currentRoom);
-        }
 
-        renderMembers();
-      }
-    )
-    .on('broadcast', { event: 'rtc-signal' }, ({ payload }) => {
-      handleSignal(payload);
-    })
-    .on('presence', { event: 'sync' }, () => {
-      connectPresentPeers();
-    })
-    .on('presence', { event: 'leave' }, ({ key }) => {
-      closePeer(key);
-    });
+  document.addEventListener('mousemove', event => {
 
-  await roomChannel.subscribe(async s => {
-    if (s === 'SUBSCRIBED') {
-      await roomChannel.track({
-        user_id: currentMember.user_id,
-        name: currentMember.display_name,
-        seat: currentMember.seat_number
-      });
+    if (!isPointerLocked) return;
 
-      setRoomStatus('CONECTADO');
 
-    } else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') {
-      setRoomStatus('RECONectando…');
-    }
+
+    yaw -= event.movementX * 0.002;
+
+    pitch -= event.movementY * 0.002;
+
+
+
+    pitch = Math.max(-0.5, Math.min(0.5, pitch));
+
+
+
+    updateCameraRotation();
+
   });
+
 }
+
+
+
+function updateCameraRotation() {
+
+  const direction = new THREE.Vector3(
+
+    Math.sin(yaw) * Math.cos(pitch),
+
+    Math.sin(pitch),
+
+    Math.cos(yaw) * Math.cos(pitch)
+
+  );
+
+
+
+  camera.lookAt(
+
+    camera.position.clone().add(direction)
+
+  );
+
+}
+
+
 
 // ======================================================
-// SINCRONIZAÇÃO DA REPRODUÇÃO
+
+// CARREGAMENTO DO MODELO 3D
+
 // ======================================================
 
-async function publishPlayback(status, mediaUrl = undefined, force = false) {
-  if (!currentRoom || !isHost() || isApplyingRemotePlayback) return;
 
-  const now = Date.now();
 
-  // Eventos de play, pause e seek são importantes:
-  // não podem ser descartados por uma janela de debounce.
-  if (!force && now - lastPlaybackWrite < 250) return;
+async function loadCinemaModel() {
 
-  lastPlaybackWrite = now;
+  const loader = new GLTFLoader();
 
-  const position = videoElement && Number.isFinite(videoElement.currentTime)
-    ? videoElement.currentTime
-    : Number(currentRoom.playback_position || 0);
 
-  const { data, error } = await supabase.rpc('set_room_playback', {
-    p_status: status,
-    p_position: position,
-    p_media_url: mediaUrl === undefined
-      ? (currentRoom.media_url || null)
-      : mediaUrl
+
+  const gltf = await loader.loadAsync(MODEL_PATH);
+
+
+
+  const model = gltf.scene;
+
+
+
+  model.traverse(object => {
+
+    if (!object.isMesh) return;
+
+
+
+    object.castShadow = true;
+
+    object.receiveShadow = true;
+
+
+
+    if (object.name === SCREEN_NAME) {
+
+      screenMesh = object;
+
+    }
+
+
+
+    if (object.material) {
+
+      object.material.needsUpdate = true;
+
+    }
+
   });
 
-  if (error) {
-    console.error('Erro ao compartilhar reprodução:', error);
-    showToast(`Não foi possível sincronizar: ${error.message}`);
-    return;
-  }
 
-  // Mantém o estado local atualizado mesmo que o Realtime demore.
-  if (data && typeof data === 'object') {
-    currentRoom = { ...currentRoom, ...data };
-  } else {
-    currentRoom = {
-      ...currentRoom,
-      media_url: mediaUrl === undefined ? currentRoom.media_url : mediaUrl,
-      playback_status: status,
-      playback_position: position,
-      playback_updated_at: new Date().toISOString()
-    };
-  }
+
+  scene.add(model);
+
 }
 
-async function waitForVideoMetadata(video) {
-  if (video.readyState >= 1) return;
 
-  await new Promise((resolve, reject) => {
-    const onReady = () => {
-      cleanup();
-      resolve();
-    };
 
-    const onError = () => {
-      cleanup();
-      reject(new Error('O vídeo não carregou. Confira se o link é público e permite reprodução externa.'));
-    };
+// ======================================================
 
-    const cleanup = () => {
-      video.removeEventListener('loadedmetadata', onReady);
-      video.removeEventListener('error', onError);
-    };
+// TELA DE VÍDEO
 
-    video.addEventListener('loadedmetadata', onReady, { once: true });
-    video.addEventListener('error', onError, { once: true });
+// ======================================================
+
+
+
+function createVideoScreen() {
+
+  videoElement = document.createElement('video');
+
+
+
+  videoElement.crossOrigin = 'anonymous';
+
+  videoElement.playsInline = true;
+
+  videoElement.preload = 'auto';
+
+  videoElement.controls = false;
+
+  videoElement.loop = false;
+
+
+
+  videoElement.addEventListener('loadedmetadata', updatePlaybackUI);
+
+  videoElement.addEventListener('timeupdate', updatePlaybackUI);
+
+  videoElement.addEventListener('durationchange', updatePlaybackUI);
+
+  videoElement.addEventListener('play', updatePlaybackUI);
+
+  videoElement.addEventListener('pause', updatePlaybackUI);
+
+
+
+  videoTexture = new THREE.VideoTexture(videoElement);
+
+  videoTexture.colorSpace = THREE.SRGBColorSpace;
+
+
+
+  const geometry = new THREE.PlaneGeometry(
+
+    SCREEN_WIDTH,
+
+    SCREEN_HEIGHT
+
+  );
+
+
+
+  const material = new THREE.MeshBasicMaterial({
+
+    map: videoTexture,
+
+    side: THREE.DoubleSide
+
   });
+
+
+
+  const screen = new THREE.Mesh(geometry, material);
+
+
+
+  screen.position.copy(SCREEN_CENTER);
+
+
+
+  screen.rotation.y = -Math.PI / 2;
+
+
+
+  scene.add(screen);
+
+
+
+  if (screenMesh) {
+
+    screenMesh.visible = false;
+
+  }
+
+
+
+  videoElement.addEventListener('error', () => {
+
+    console.error('Erro no vídeo:', videoElement.error);
+
+    showMessage('Não foi possível carregar este vídeo.');
+
+  });
+
 }
 
-async function applyRemoteRoomPlayback(room) {
-  if (!room || isHost() || !room.media_url) return;
 
-  const media = room.media_url;
+
+// ======================================================
+
+// CARREGAMENTO DE VÍDEO
+
+// ======================================================
+
+
+
+function isDirectVideoUrl(url) {
+
+  return /\.(mp4|webm|ogg)(\?.*)?$/i.test(url);
+
+}
+
+
+
+function getVideoType(url) {
+
+  if (/\.(mp4)(\?.*)?$/i.test(url)) return 'video/mp4';
+
+  if (/\.(webm)(\?.*)?$/i.test(url)) return 'video/webm';
+
+  if (/\.(ogg)(\?.*)?$/i.test(url)) return 'video/ogg';
+
+  return '';
+
+}
+
+
+
+function getEmbedUrl(url) {
 
   try {
-    if (media !== lastLoadedRemoteMedia) {
-      const parsed = parseVideoLink(media);
 
-      disposeCurrentVideo();
+    const parsed = new URL(url);
 
-      if (parsed.provider === 'file') {
-        playDirectVideo(parsed.src, media, true);
-        lastLoadedRemoteMedia = media;
 
-        const video = videoElement;
-        await waitForVideoMetadata(video);
 
-      } else {
-        makeEmbeddedScreen(parsed.src);
+    if (parsed.hostname.includes('youtube.com')) {
 
-        nowPlaying.textContent = parsed.provider === 'youtube'
-          ? 'YOUTUBE NO TELÃO'
-          : 'VIMEO NO TELÃO';
+      const id = parsed.searchParams.get('v');
 
-        lastLoadedRemoteMedia = media;
+      if (id) {
 
-        showToast('O anfitrião compartilhou um vídeo. Player carregado.');
-        return;
+        return `https://www.youtube.com/embed/${id}?autoplay=1`;
+
       }
+
     }
 
-    if (!videoElement) return;
 
-    const video = videoElement;
 
-    const updatedAt = room.playback_updated_at
-      ? new Date(room.playback_updated_at).getTime()
-      : Date.now();
+    if (parsed.hostname.includes('youtu.be')) {
 
-    const elapsed = room.playback_status === 'playing'
-      ? Math.max(0, (Date.now() - updatedAt) / 1000)
-      : 0;
+      const id = parsed.pathname.replace('/', '');
 
-    const basePosition = Number(room.playback_position || 0);
-    const expected = basePosition + elapsed;
+      if (id) {
 
-    isApplyingRemotePlayback = true;
+        return `https://www.youtube.com/embed/${id}?autoplay=1`;
 
-    if (Number.isFinite(expected) && video.readyState >= 1) {
-      const duration = Number.isFinite(video.duration)
-        ? video.duration
-        : expected;
-
-      const target = Math.min(expected, duration);
-
-      if (Math.abs(video.currentTime - target) > 0.8) {
-        video.currentTime = target;
       }
+
     }
 
-    if (room.playback_status === 'playing') {
-      try {
-        await video.play();
-      } catch {
-        showToast('Clique em reproduzir para liberar o áudio neste navegador.');
+
+
+    if (parsed.hostname.includes('vimeo.com')) {
+
+      const id = parsed.pathname.split('/').filter(Boolean).pop();
+
+      if (id) {
+
+        return `https://player.vimeo.com/video/${id}?autoplay=1`;
+
       }
-    } else {
-      video.pause();
+
     }
+
+
+
+  } catch (error) {
+
+    console.error(error);
+
+  }
+
+
+
+  return null;
+
+}
+
+
+
+async function loadVideoLink(raw, fromRemote = false) {
+
+  const value = String(raw || '').trim();
+
+
+
+  if (!value) return;
+
+
+
+  let parsed;
+
+
+
+  try {
+
+    parsed = new URL(value);
+
+  } catch {
+
+    showMessage('Link inválido.');
+
+    return;
+
+  }
+
+
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+
+    showMessage('Use um link HTTP ou HTTPS.');
+
+    return;
+
+  }
+
+
+
+  const directVideo = isDirectVideoUrl(value);
+
+
+
+  const embedUrl = getEmbedUrl(value);
+
+
+
+  if (!directVideo && !embedUrl) {
+
+    showMessage('Formato de vídeo não reconhecido.');
+
+    return;
+
+  }
+
+
+
+  if (!fromRemote && currentRoom && !isHost) {
+
+    showMessage('Somente o anfitrião pode trocar o vídeo.');
+
+    return;
+
+  }
+
+
+
+  if (directVideo) {
+
+    if (localObjectUrl) {
+
+      URL.revokeObjectURL(localObjectUrl);
+
+      localObjectUrl = null;
+
+    }
+
+
+
+    videoElement.pause();
+
+    videoElement.removeAttribute('src');
+
+    videoElement.load();
+
+
+
+    videoElement.src = value;
+
+    currentVideoUrl = value;
+
+
+
+    videoElement.load();
+
+
+
+    try {
+
+      await videoElement.play();
+
+    } catch (error) {
+
+      console.warn('Autoplay bloqueado:', error);
+
+    }
+
+
+
+    if (!fromRemote && currentRoom && isHost) {
+
+      await publishPlayback('playing', value, true);
+
+    }
+
+
 
     updatePlaybackUI();
 
-  } catch (error) {
-    console.error('Erro ao sincronizar vídeo:', error);
-    showToast(error.message || 'Não foi possível sincronizar o vídeo.');
-  } finally {
-    setTimeout(() => {
-      isApplyingRemotePlayback = false;
-    }, 350);
-  }
-}
-
-async function leaveRoom() {
-  try {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-
-    stopVoice();
-
-    if (roomChannel) {
-      await supabase.removeChannel(roomChannel);
-      roomChannel = null;
-    }
-
-    await supabase.rpc('leave_room');
-
-  } catch (e) {
-    console.warn('Saída da sala:', e);
-  }
-
-  currentRoom = null;
-  currentMember = null;
-  roomMembers = [];
-  lastLoadedRemoteMedia = null;
-
-  $('#roomHud').classList.remove('visible');
-  $('#roomHud').hidden = true;
-
-  $('#roomGate').hidden = false;
-
-  camera.position.copy(CAMERA_START);
-
-  yaw = Math.PI / 2;
-
-  pitch = Math.atan2(
-    LOOK_AT_START.y - CAMERA_START.y,
-    Math.hypot(
-      LOOK_AT_START.x - CAMERA_START.x,
-      LOOK_AT_START.z - CAMERA_START.z
-    )
-  );
-
-  updateCamera();
-
-  showToast('Você saiu da sala.');
-}
-
-// ======================================================
-// VOZ: WEBRTC + SUPABASE REALTIME
-// ======================================================
-
-async function sendSignal(to, data) {
-  if (!roomChannel) return;
-
-  await roomChannel.send({
-    type: 'broadcast',
-    event: 'rtc-signal',
-    payload: {
-      from: currentMember.user_id,
-      to,
-      ...data
-    }
-  });
-}
-
-function closePeer(id) {
-  const pc = peers.get(id);
-
-  if (pc) {
-    pc.close();
-    peers.delete(id);
-  }
-
-  const audio = remoteAudio.get(id);
-
-  if (audio) {
-    audio.srcObject = null;
-    audio.remove();
-    remoteAudio.delete(id);
-  }
-}
-
-function createPeer(id) {
-  if (peers.has(id)) return peers.get(id);
-
-  const pc = new RTCPeerConnection({
-    iceServers: STUN_SERVERS
-  });
-
-  peers.set(id, pc);
-
-  if (localStream) {
-    localStream.getTracks().forEach(track => {
-      pc.addTrack(track, localStream);
-    });
-  }
-
-  pc.onicecandidate = e => {
-    if (e.candidate) {
-      sendSignal(id, { candidate: e.candidate });
-    }
-  };
-
-  pc.ontrack = e => {
-    let audio = remoteAudio.get(id);
-
-    if (!audio) {
-      audio = document.createElement('audio');
-
-      audio.autoplay = true;
-      audio.playsInline = true;
-      audio.dataset.peer = id;
-
-      document.body.appendChild(audio);
-
-      remoteAudio.set(id, audio);
-    }
-
-    audio.srcObject = e.streams[0];
-    audio.play().catch(() => {});
-  };
-
-  pc.onconnectionstatechange = () => {
-    if (['failed', 'closed'].includes(pc.connectionState)) {
-      closePeer(id);
-    }
-  };
-
-  return pc;
-}
-
-async function connectPresentPeers() {
-  if (!roomChannel || !currentMember) return;
-
-  const state = roomChannel.presenceState();
-
-  const ids = Object.keys(state).filter(
-    id => id !== currentMember.user_id
-  );
-
-  for (const id of ids) {
-    if (peers.has(id) || !localStream) continue;
-
-    if (currentMember.user_id < id) {
-      const pc = createPeer(id);
-
-      const offer = await pc.createOffer();
-
-      await pc.setLocalDescription(offer);
-
-      await sendSignal(id, {
-        description: pc.localDescription
-      });
-    }
-  }
-}
-
-async function handleSignal(payload) {
-  if (
-    !payload ||
-    payload.to !== currentMember?.user_id ||
-    payload.from === currentMember?.user_id
-  ) {
     return;
+
   }
 
+
+
+  // YouTube e Vimeo usam player incorporado.
+
+  // A sincronização de pausa e avanço depende da API específica do provedor.
+
+
+
+  currentVideoUrl = value;
+
+
+
+  const iframe = document.createElement('iframe');
+
+  iframe.src = embedUrl;
+
+  iframe.allow = 'autoplay; fullscreen; picture-in-picture';
+
+  iframe.allowFullscreen = true;
+
+
+
+  const wrapper = $('#videoEmbed');
+
+
+
+  if (wrapper) {
+
+    wrapper.innerHTML = '';
+
+    wrapper.appendChild(iframe);
+
+    wrapper.style.display = 'block';
+
+  }
+
+
+
+  if (!fromRemote && currentRoom && isHost) {
+
+    await publishPlayback('playing', value, true);
+
+  }
+
+}
+
+
+
+// ======================================================
+
+// SINCRONIZAÇÃO DE REPRODUÇÃO
+
+// ======================================================
+
+
+
+async function waitForVideoMetadata(video) {
+
+  if (video.readyState >= 1) return;
+
+
+
+  await new Promise((resolve, reject) => {
+
+    const timeout = setTimeout(() => {
+
+      cleanup();
+
+      reject(new Error('Tempo esgotado aguardando os metadados do vídeo.'));
+
+    }, 15000);
+
+
+
+    function loaded() {
+
+      cleanup();
+
+      resolve();
+
+    }
+
+
+
+    function failed() {
+
+      cleanup();
+
+      reject(new Error('Não foi possível carregar os metadados do vídeo.'));
+
+    }
+
+
+
+    function cleanup() {
+
+      clearTimeout(timeout);
+
+      video.removeEventListener('loadedmetadata', loaded);
+
+      video.removeEventListener('error', failed);
+
+    }
+
+
+
+    video.addEventListener('loadedmetadata', loaded, { once: true });
+
+    video.addEventListener('error', failed, { once: true });
+
+  });
+
+}
+
+
+
+async function publishPlayback(status, mediaUrl = undefined, force = false) {
+
+  if (!currentRoom || !isHost || isApplyingRemotePlayback) return;
+
+
+
+  const now = Date.now();
+
+
+
+  if (!force && now - lastPlaybackPublish < 500) {
+
+    clearTimeout(playbackDebounceTimer);
+
+
+
+    playbackDebounceTimer = setTimeout(() => {
+
+      publishPlayback(status, mediaUrl, true);
+
+    }, 550);
+
+
+
+    return;
+
+  }
+
+
+
+  lastPlaybackPublish = now;
+
+
+
+  const position = videoElement && Number.isFinite(videoElement.currentTime)
+
+    ? videoElement.currentTime
+
+    : 0;
+
+
+
+  const payload = {
+
+    room_id: currentRoom.id,
+
+    playback_status: status,
+
+    playback_position: position,
+
+    playback_updated_at: new Date().toISOString()
+
+  };
+
+
+
+  if (mediaUrl !== undefined) {
+
+    payload.media_url = mediaUrl;
+
+  }
+
+
+
   try {
-    if (payload.ready) {
-      if (currentMember.user_id < payload.from) {
-        const pc = createPeer(payload.from);
 
-        const offer = await pc.createOffer();
+    const { error } = await supabase.rpc('set_room_playback', {
 
-        await pc.setLocalDescription(offer);
+      p_room_id: currentRoom.id,
 
-        await sendSignal(payload.from, {
-          description: pc.localDescription
-        });
-      }
+      p_status: status,
+
+      p_position: position,
+
+      p_media_url: mediaUrl === undefined ? null : mediaUrl
+
+    });
+
+
+
+    if (error) throw error;
+
+
+
+    currentRoom.playback_status = status;
+
+    currentRoom.playback_position = position;
+
+    currentRoom.playback_updated_at = payload.playback_updated_at;
+
+
+
+    if (mediaUrl !== undefined) {
+
+      currentRoom.media_url = mediaUrl;
+
+    }
+
+
+
+  } catch (error) {
+
+    console.error('Erro ao sincronizar reprodução:', error);
+
+  }
+
+}
+
+
+
+async function applyRemoteRoomPlayback(room) {
+
+  if (!room || !videoElement) return;
+
+
+
+  if (isHost) return;
+
+
+
+  const mediaUrl = room.media_url;
+
+
+
+  if (!mediaUrl) return;
+
+
+
+  try {
+
+    isApplyingRemotePlayback = true;
+
+
+
+    if (currentVideoUrl !== mediaUrl) {
+
+      await loadVideoLink(mediaUrl, true);
+
+    }
+
+
+
+    if (!isDirectVideoUrl(mediaUrl)) {
 
       return;
+
     }
 
-    const pc = createPeer(payload.from);
 
-    if (payload.description) {
-      await pc.setRemoteDescription(payload.description);
 
-      if (payload.description.type === 'offer') {
-        const answer = await pc.createAnswer();
+    await waitForVideoMetadata(videoElement);
 
-        await pc.setLocalDescription(answer);
 
-        await sendSignal(payload.from, {
-          description: pc.localDescription
-        });
+
+    let position = Number(room.playback_position || 0);
+
+
+
+    if (room.playback_status === 'playing' && room.playback_updated_at) {
+
+      const updatedAt = new Date(room.playback_updated_at).getTime();
+
+
+
+      if (Number.isFinite(updatedAt)) {
+
+        const elapsed = Math.max(0, (Date.now() - updatedAt) / 1000);
+
+        position += elapsed;
+
       }
 
-    } else if (payload.candidate) {
-      await pc.addIceCandidate(payload.candidate);
     }
 
-  } catch (e) {
-    console.warn('Sinalização de voz:', e);
-  }
-}
 
-async function startVoice() {
-  if (!currentRoom) {
-    return showToast('Entre em uma sala primeiro.');
-  }
 
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      },
-      video: false
-    });
+    if (Number.isFinite(videoElement.duration)) {
 
-    $('#micBtn').textContent = 'MICROFONE LIGADO';
-    $('#micBtn').classList.add('active');
+      position = Math.min(position, videoElement.duration);
 
-    const ids = [...peers.keys()];
-
-    ids.forEach(closePeer);
-
-    const state = roomChannel.presenceState();
-
-    for (const id of Object.keys(state).filter(
-      id => id !== currentMember.user_id
-    )) {
-      await sendSignal(id, { ready: true });
-
-      if (currentMember.user_id < id) {
-        const pc = createPeer(id);
-
-        const offer = await pc.createOffer();
-
-        await pc.setLocalDescription(offer);
-
-        await sendSignal(id, {
-          description: pc.localDescription
-        });
-      }
     }
 
-    showToast('Microfone conectado.');
 
-  } catch (e) {
-    showToast(`Não foi possível acessar o microfone: ${e.message}`);
-  }
-}
 
-function stopVoice() {
-  peers.forEach((_, id) => closePeer(id));
+    if (Math.abs(videoElement.currentTime - position) > 0.8) {
 
-  if (localStream) {
-    localStream.getTracks().forEach(t => t.stop());
-    localStream = null;
-  }
+      videoElement.currentTime = position;
 
-  $('#micBtn')?.classList.remove('active');
-
-  if ($('#micBtn')) {
-    $('#micBtn').textContent = 'ATIVAR MICROFONE';
-  }
-}
-
-// ======================================================
-// CARREGAMENTO DO MODELO 3D
-// ======================================================
-
-const loader = new GLTFLoader();
-
-loader.load(
-  MODEL_PATH,
-
-  gltf => {
-    const model = gltf.scene;
-
-    model.traverse(obj => {
-      if (obj.isMesh) {
-        obj.frustumCulled = true;
-
-        if (obj.name === SCREEN_NAME) {
-          screenMesh = obj;
-
-          originalScreenMaterial = Array.isArray(obj.material)
-            ? obj.material.map(m => m.clone())
-            : obj.material.clone();
-        }
-      }
-    });
-
-    model.traverse(obj => {
-      if (obj.isMesh) {
-        console.log(
-          'OBJETO:',
-          obj.name,
-          'POSIÇÃO:',
-          obj.getWorldPosition(new THREE.Vector3())
-        );
-      }
-    });
-
-    scene.add(model);
-
-    // Cria as marcações numeradas depois de carregar o modelo
-    updateSeatMarkers();
-
-    if (!screenMesh) {
-      console.warn(`Objeto "${SCREEN_NAME}" não encontrado.`);
-      showToast('Modelo carregado; objeto Screen não encontrado.');
     }
 
-    loading.classList.add('done');
 
-    setTimeout(() => loading.remove(), 600);
 
-    renderer.domElement.style.cursor = 'grab';
-  },
+    if (room.playback_status === 'playing') {
 
-  undefined,
+      try {
 
-  error => {
-    console.error(error);
+        await videoElement.play();
 
-    loading.innerHTML =
-      '<span>Não foi possível carregar Cine.glb.</span><span>Confira public/models/Cine.glb.</span>';
-  }
-);
+      } catch (error) {
 
-// ======================================================
-// ENTRADA NO CINEMA
-// ======================================================
+        console.warn('O navegador bloqueou o autoplay:', error);
 
-function enterCinema() {
-  entered = true;
+      }
 
-  welcome.classList.add('hidden');
-  hint.classList.add('visible');
-
-  renderer.domElement.requestPointerLock?.();
-
-  setTimeout(() => {
-    hint.classList.remove('visible');
-  }, 5500);
-}
-
-renderer.domElement.addEventListener('click', () => {
-  if (
-    entered &&
-    document.pointerLockElement !== renderer.domElement
-  ) {
-    renderer.domElement.requestPointerLock?.();
-  }
-});
-
-document.addEventListener('pointerlockchange', () => {
-  const locked =
-    document.pointerLockElement === renderer.domElement;
-
-  renderer.domElement.style.cursor = locked ? 'none' : 'grab';
-
-  if (entered && !locked) {
-    hint.classList.add('visible');
-
-    setTimeout(() => {
-      hint.classList.remove('visible');
-    }, 3500);
-  }
-});
-
-document.addEventListener('mousemove', event => {
-  if (document.pointerLockElement !== renderer.domElement) return;
-
-  yaw -= event.movementX * 0.0022;
-  pitch -= event.movementY * 0.0022;
-
-  yaw = THREE.MathUtils.clamp(
-    yaw,
-    -Math.PI * 2,
-    Math.PI * 2
-  );
-
-  pitch = THREE.MathUtils.clamp(pitch, -1, 1);
-
-  updateCamera();
-});
-
-// ======================================================
-// CONTROLES EXISTENTES
-// ======================================================
-
-a$('#enterBtn')?.addEventListener('click', enterCinema);
-
-a$('#movieBtn')?.addEventListener('click', () => {
-  panel.classList.toggle('open');
-});
-
-a$('#closePanel')?.addEventListener('click', () => {
-  panel.classList.remove('open');
-});
-
-a$('#videoForm')?.addEventListener('submit', event => {
-  event.preventDefault();
-
-  const value = $('#videoUrl').value;
-
-  if (value) {
-    loadVideoLink(value);
-  } else {
-    message.textContent = 'Cole primeiro o link do vídeo.';
-  }
-});
-
-a$('#videoFile')?.addEventListener('change', event => {
-  loadLocalFile(event.target.files?.[0]);
-});
-
-a$('#fullscreenBtn')?.addEventListener('click', async () => {
-  try {
-    if (!document.fullscreenElement) {
-      await app.requestFullscreen();
     } else {
-      await document.exitFullscreen();
-    }
-  } catch {
-    showToast('O navegador não permitiu abrir a tela cheia.');
-  }
-});
 
-// ======================================================
-// CONTROLES DE PLAY / PAUSE
-// ======================================================
-
-a$('#playPauseBtn')?.addEventListener('click', async () => {
-  if (!videoElement) {
-    return showToast('O controle de pausa funciona com links diretos MP4, WebM ou OGG.');
-  }
-
-  // Convidados podem clicar apenas para liberar o autoplay bloqueado pelo navegador.
-  // O estado oficial de play/pause continua sendo controlado pelo anfitrião.
-  if (currentRoom && !isHost()) {
-    try {
-      await videoElement.play();
-    } catch {
-      showToast('O navegador bloqueou a reprodução. Tente clicar novamente.');
-    }
-
-    return;
-  }
-
-  try {
-    if (videoElement.paused) {
-      await videoElement.play();
-      await publishPlayback('playing', undefined, true);
-    } else {
       videoElement.pause();
-      await publishPlayback('paused', undefined, true);
+
     }
+
+
+
+    lastRemotePlaybackUpdate = Date.now();
+
+
+
   } catch (error) {
-    showToast(`Não foi possível alterar a reprodução: ${error.message}`);
-  }
-});
 
-// ======================================================
-// BARRA DE TEMPO
-// ======================================================
+    console.error('applyRemoteRoomPlayback:', error);
 
-a$('#seekBar')?.addEventListener('pointerdown', () => {
-  isSeeking = true;
-});
+  } finally {
 
-a$('#seekBar')?.addEventListener('pointerup', () => {
-  isSeeking = false;
-});
+    isApplyingRemotePlayback = false;
 
-a$('#seekBar')?.addEventListener('input', event => {
-  if (!videoElement || (currentRoom && !isHost())) return;
-
-  const value = Number(event.target.value);
-
-  if (Number.isFinite(value)) {
-    videoElement.currentTime = value;
-  }
-});
-
-a$('#seekBar')?.addEventListener('change', async () => {
-  isSeeking = false;
-
-  if (!videoElement || (currentRoom && !isHost())) return;
-
-  const status = videoElement.paused ? 'paused' : 'playing';
-
-  await publishPlayback(status, undefined, true);
-});
-
-// ======================================================
-// CONTROLES MULTIPLAYER
-// ======================================================
-
-a$('#openRoomBtn')?.addEventListener('click', () => {
-  $('#roomGate').hidden = false;
-  $('#roomGate').classList.add('open');
-});
-
-a$('#closeRoomGate')?.addEventListener('click', () => {
-  $('#roomGate').classList.remove('open');
-  $('#roomGate').hidden = true;
-});
-
-a$('#createRoomBtn')?.addEventListener('click', createRoom);
-
-a$('#joinRoomBtn')?.addEventListener('click', joinRoom);
-
-a$('#leaveRoomBtn')?.addEventListener('click', leaveRoom);
-
-a$('#copyCodeBtn')?.addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(currentRoom.code);
-    showToast('Código copiado!');
-  } catch {
-    showToast(`Código da sala: ${currentRoom.code}`);
-  }
-});
-
-a$('#micBtn')?.addEventListener('click', () => {
-  localStream ? stopVoice() : startVoice();
-});
-
-a$('#roomMovieBtn')?.addEventListener('click', () => {
-  if (!isHost()) {
-    return showToast('Somente o anfitrião pode escolher o vídeo.');
   }
 
-  panel.classList.toggle('open');
-});
+}
+
+
 
 // ======================================================
-// INTERFACE DE REPRODUÇÃO
+
+// ATUALIZAÇÃO DA INTERFACE DO PLAYER
+
 // ======================================================
+
+
 
 function updatePlaybackUI() {
-  const button = $('#playPauseBtn');
+
+  if (!videoElement) return;
+
+
+
   const seek = $('#seekBar');
 
-  if (!button || !seek) return;
+  const currentTimeLabel = $('#currentTime');
 
-  const hasDirectVideo = !!videoElement;
-  const canControlSeek = hasDirectVideo && (!currentRoom || isHost());
+  const durationLabel = $('#duration');
 
-  button.disabled = !hasDirectVideo;
-  seek.disabled = !canControlSeek;
 
-  button.textContent =
-    videoElement && !videoElement.paused
-      ? 'Ⅱ PAUSAR'
-      : '▶ REPRODUZIR';
 
-  if (!videoElement) {
-    seek.min = '0';
-    seek.max = '100';
-    seek.value = '0';
-    return;
-  }
+  if (seek) {
 
-  const duration = videoElement.duration;
-  const currentTime = videoElement.currentTime;
+    const duration = Number.isFinite(videoElement.duration)
 
-  seek.min = '0';
-  seek.step = '0.1';
+      ? videoElement.duration
 
-  if (Number.isFinite(duration) && duration > 0) {
+      : 0;
+
+
+
     seek.max = String(duration);
+
+
+
+    if (!isSeeking) {
+
+      seek.value = String(videoElement.currentTime || 0);
+
+    }
+
+
+
+    seek.disabled = !isHost && !!currentRoom;
+
   }
 
-  // Não puxa a bolinha de volta enquanto o usuário está arrastando.
-  if (!isSeeking && Number.isFinite(currentTime)) {
-    seek.value = String(currentTime);
+
+
+  if (currentTimeLabel) {
+
+    currentTimeLabel.textContent = formatTime(videoElement.currentTime || 0);
+
   }
+
+
+
+  if (durationLabel) {
+
+    durationLabel.textContent = formatTime(
+
+      Number.isFinite(videoElement.duration) ? videoElement.duration : 0
+
+    );
+
+  }
+
+
+
+  if (playPauseBtn) {
+
+    playPauseBtn.textContent = videoElement.paused ? '▶' : 'Ⅱ';
+
+  }
+
 }
 
-// ======================================================
-// UTILITÁRIOS E ANIMAÇÃO
-// ======================================================
 
-function a$(selector) {
-  return document.querySelector(selector);
+
+function formatTime(seconds) {
+
+  if (!Number.isFinite(seconds)) return '0:00';
+
+
+
+  const total = Math.floor(seconds);
+
+  const minutes = Math.floor(total / 60);
+
+  const remainder = total % 60;
+
+
+
+  return `${minutes}:${String(remainder).padStart(2, '0')}`;
+
 }
 
-function resize() {
-  camera.aspect = innerWidth / innerHeight;
+
+
+// ======================================================
+
+// EVENTOS DO PLAYER
+
+// ======================================================
+
+
+
+function setupPlayerEvents() {
+
+  playPauseBtn?.addEventListener('click', async () => {
+
+    if (!videoElement) return;
+
+
+
+    if (videoElement.paused) {
+
+      try {
+
+        await videoElement.play();
+
+      } catch (error) {
+
+        console.warn(error);
+
+      }
+
+    } else {
+
+      videoElement.pause();
+
+    }
+
+
+
+    if (isHost) {
+
+      await publishPlayback(
+
+        videoElement.paused ? 'paused' : 'playing',
+
+        undefined,
+
+        true
+
+      );
+
+    }
+
+
+
+    updatePlaybackUI();
+
+  });
+
+
+
+  a$('#seekBar')?.addEventListener('pointerdown', () => {
+
+    isSeeking = true;
+
+  });
+
+
+
+  a$('#seekBar')?.addEventListener('input', event => {
+
+    if (!videoElement || !Number.isFinite(videoElement.duration)) return;
+
+
+
+    const nextTime = Number(event.target.value);
+
+
+
+    if (Number.isFinite(nextTime)) {
+
+      videoElement.currentTime = Math.max(
+
+        0,
+
+        Math.min(nextTime, videoElement.duration)
+
+      );
+
+    }
+
+
+
+    updatePlaybackUI();
+
+  });
+
+
+
+  a$('#seekBar')?.addEventListener('change', async () => {
+
+    isSeeking = false;
+
+
+
+    if (isHost) {
+
+      await publishPlayback(
+
+        videoElement.paused ? 'paused' : 'playing',
+
+        undefined,
+
+        true
+
+      );
+
+    }
+
+
+
+    updatePlaybackUI();
+
+  });
+
+
+
+  a$('#seekBar')?.addEventListener('pointerup', () => {
+
+    isSeeking = false;
+
+  });
+
+
+
+  a$('#seekBar')?.addEventListener('pointercancel', () => {
+
+    isSeeking = false;
+
+  });
+
+
+
+  videoElement?.addEventListener('ended', async () => {
+
+    if (isHost) {
+
+      await publishPlayback('paused', undefined, true);
+
+    }
+
+  });
+
+}
+
+
+
+// ======================================================
+
+// SALAS
+
+// ======================================================
+
+
+
+async function createRoom() {
+
+  if (!currentUser) {
+
+    showMessage('Entre na sua conta primeiro.');
+
+    return;
+
+  }
+
+
+
+  try {
+
+    const { data, error } = await supabase.rpc('create_room');
+
+
+
+    if (error) throw error;
+
+
+
+    const room = Array.isArray(data) ? data[0] : data;
+
+
+
+    if (!room) {
+
+      throw new Error('O Supabase não retornou a sala criada.');
+
+    }
+
+
+
+    currentRoom = room;
+
+    isHost = true;
+
+
+
+    await enterRoom(room);
+
+
+
+  } catch (error) {
+
+    console.error('Erro ao criar sala:', error);
+
+    showMessage(error.message || 'Não foi possível criar a sala.');
+
+  }
+
+}
+
+
+
+async function joinRoom(roomCode) {
+
+  if (!currentUser) {
+
+    showMessage('Entre na sua conta primeiro.');
+
+    return;
+
+  }
+
+
+
+  try {
+
+    const { data, error } = await supabase.rpc('join_room', {
+
+      p_code: roomCode
+
+    });
+
+
+
+    if (error) throw error;
+
+
+
+    const room = Array.isArray(data) ? data[0] : data;
+
+
+
+    if (!room) {
+
+      throw new Error('Sala não encontrada.');
+
+    }
+
+
+
+    currentRoom = room;
+
+    isHost = false;
+
+
+
+    await enterRoom(room);
+
+
+
+  } catch (error) {
+
+    console.error('Erro ao entrar na sala:', error);
+
+    showMessage(error.message || 'Não foi possível entrar na sala.');
+
+  }
+
+}
+
+
+
+async function enterRoom(room) {
+
+  currentRoom = room;
+
+
+
+  await refreshRoomState();
+
+
+
+  if (currentRoom) {
+
+    await applyRemoteRoomPlayback(currentRoom);
+
+  }
+
+
+
+  subscribeToRoom();
+
+
+
+  startHeartbeat();
+
+
+
+  if (welcomeElement) {
+
+    welcomeElement.style.display = 'none';
+
+  }
+
+
+
+  if (playerPanel) {
+
+    playerPanel.style.display = 'block';
+
+  }
+
+}
+
+
+
+async function refreshRoomState() {
+
+  if (!currentRoom) return;
+
+
+
+  try {
+
+    const { data, error } = await supabase.rpc('get_room_state', {
+
+      p_room_id: currentRoom.id
+
+    });
+
+
+
+    if (error) throw error;
+
+
+
+    const room = Array.isArray(data) ? data[0] : data;
+
+
+
+    if (room) {
+
+      currentRoom = {
+
+        ...currentRoom,
+
+        ...room
+
+      };
+
+    }
+
+
+
+  } catch (error) {
+
+    console.error('Erro ao atualizar sala:', error);
+
+  }
+
+}
+
+
+
+function subscribeToRoom() {
+
+  if (!currentRoom) return;
+
+
+
+  if (roomChannel) {
+
+    supabase.removeChannel(roomChannel);
+
+    roomChannel = null;
+
+  }
+
+
+
+  roomChannel = supabase
+
+    .channel(`room-${currentRoom.id}`)
+
+    .on(
+
+      'postgres_changes',
+
+      {
+
+        event: 'UPDATE',
+
+        schema: 'public',
+
+        table: 'rooms',
+
+        filter: `id=eq.${currentRoom.id}`
+
+      },
+
+      async payload => {
+
+        const updatedRoom = payload.new;
+
+
+
+        currentRoom = {
+
+          ...currentRoom,
+
+          ...updatedRoom
+
+        };
+
+
+
+        if (!isHost) {
+
+          await applyRemoteRoomPlayback(currentRoom);
+
+        }
+
+      }
+
+    )
+
+    .subscribe();
+
+}
+
+
+
+// ======================================================
+
+// PRESENÇA E HEARTBEAT
+
+// ======================================================
+
+
+
+function startHeartbeat() {
+
+  clearInterval(heartbeatTimer);
+
+
+
+  heartbeatTimer = setInterval(async () => {
+
+    if (!currentRoom) return;
+
+
+
+    try {
+
+      await supabase.rpc('room_heartbeat', {
+
+        p_room_id: currentRoom.id
+
+      });
+
+    } catch (error) {
+
+      console.warn('Heartbeat:', error);
+
+    }
+
+  }, 15000);
+
+}
+
+
+
+// ======================================================
+
+// SAIR DA SALA
+
+// ======================================================
+
+
+
+async function leaveRoom() {
+
+  if (!currentRoom) return;
+
+
+
+  try {
+
+    await supabase.rpc('leave_room', {
+
+      p_room_id: currentRoom.id
+
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+  }
+
+
+
+  if (roomChannel) {
+
+    await supabase.removeChannel(roomChannel);
+
+    roomChannel = null;
+
+  }
+
+
+
+  if (presenceChannel) {
+
+    await supabase.removeChannel(presenceChannel);
+
+    presenceChannel = null;
+
+  }
+
+
+
+  clearInterval(heartbeatTimer);
+
+
+
+  currentRoom = null;
+
+  currentSeat = null;
+
+  isHost = false;
+
+
+
+  if (playerPanel) {
+
+    playerPanel.style.display = 'none';
+
+  }
+
+
+
+  if (welcomeElement) {
+
+    welcomeElement.style.display = 'block';
+
+  }
+
+}
+
+
+
+// ======================================================
+
+// CADEIRAS
+
+// ======================================================
+
+
+
+function createSeatMarkers() {
+
+  seatPositions = [];
+
+
+
+  for (let i = 0; i < SEAT_CONFIG.total; i++) {
+
+    const position = new THREE.Vector3(
+
+      SEAT_CONFIG.startX + i * SEAT_CONFIG.columnSpacing,
+
+      SEAT_CONFIG.startY,
+
+      SEAT_CONFIG.startZ
+
+    );
+
+
+
+    seatPositions.push(position);
+
+
+
+    const marker = createSeatMarker(i + 1, position);
+
+
+
+    scene.add(marker);
+
+    seatMarkers.push(marker);
+
+  }
+
+}
+
+
+
+function createSeatMarker(number, position) {
+
+  const canvas = document.createElement('canvas');
+
+  canvas.width = 128;
+
+  canvas.height = 128;
+
+
+
+  const context = canvas.getContext('2d');
+
+
+
+  context.fillStyle = '#ffffff';
+
+  context.beginPath();
+
+  context.arc(64, 64, 48, 0, Math.PI * 2);
+
+  context.fill();
+
+
+
+  context.fillStyle = '#111111';
+
+  context.font = 'bold 48px Arial';
+
+  context.textAlign = 'center';
+
+  context.textBaseline = 'middle';
+
+  context.fillText(String(number), 64, 64);
+
+
+
+  const texture = new THREE.CanvasTexture(canvas);
+
+
+
+  const material = new THREE.SpriteMaterial({
+
+    map: texture,
+
+    transparent: true
+
+  });
+
+
+
+  const sprite = new THREE.Sprite(material);
+
+
+
+  sprite.position.copy(position);
+
+  sprite.position.y += SEAT_CONFIG.markerHeight;
+
+  sprite.scale.set(
+
+    SEAT_CONFIG.markerSize,
+
+    SEAT_CONFIG.markerSize,
+
+    1
+
+  );
+
+
+
+  return sprite;
+
+}
+
+
+
+function setCameraToSeat(seatNumber) {
+
+  const seat = seatPositions[seatNumber - 1];
+
+
+
+  if (!seat) return;
+
+
+
+  camera.position.copy(seat);
+
+
+
+  camera.position.y += 0.1;
+
+
+
+  camera.lookAt(LOOK_AT_START);
+
+}
+
+
+
+// ======================================================
+
+// SELETOR DE CADEIRAS
+
+// ======================================================
+
+
+
+function createSeatSwitcher() {
+
+  const select = $('#seatSelect');
+
+
+
+  if (!select) return;
+
+
+
+  select.innerHTML = '';
+
+
+
+  for (let i = 1; i <= SEAT_CONFIG.total; i++) {
+
+    const option = document.createElement('option');
+
+    option.value = String(i);
+
+    option.textContent = `Poltrona ${i}`;
+
+    select.appendChild(option);
+
+  }
+
+
+
+  select.addEventListener('change', () => {
+
+    const number = Number(select.value);
+
+
+
+    currentSeat = number;
+
+    setCameraToSeat(number);
+
+  });
+
+}
+
+
+
+// ======================================================
+
+// EVENTOS GERAIS
+
+// ======================================================
+
+
+
+function setupEvents() {
+
+  window.addEventListener('resize', onResize);
+
+
+
+  setupPlayerEvents();
+
+
+
+  $('#createRoomBtn')?.addEventListener('click', createRoom);
+
+
+
+  $('#joinRoomBtn')?.addEventListener('click', () => {
+
+    const code = $('#roomCodeInput')?.value?.trim();
+
+
+
+    if (code) {
+
+      joinRoom(code);
+
+    }
+
+  });
+
+
+
+  $('#leaveRoomBtn')?.addEventListener('click', leaveRoom);
+
+
+
+  $('#videoUrlInput')?.addEventListener('keydown', event => {
+
+    if (event.key === 'Enter') {
+
+      loadVideoLink(event.target.value);
+
+    }
+
+  });
+
+
+
+  $('#loadVideoBtn')?.addEventListener('click', () => {
+
+    const value = $('#videoUrlInput')?.value;
+
+
+
+    loadVideoLink(value);
+
+  });
+
+
+
+  $('#loginBtn')?.addEventListener('click', signIn);
+
+
+
+  $('#logoutBtn')?.addEventListener('click', signOut);
+
+
+
+  supabase.auth.getSession().then(({ data }) => {
+
+    currentUser = data.session?.user || null;
+
+  });
+
+
+
+  supabase.auth.onAuthStateChange((_event, session) => {
+
+    currentUser = session?.user || null;
+
+  });
+
+}
+
+
+
+// ======================================================
+
+// AUTENTICAÇÃO
+
+// ======================================================
+
+
+
+async function signIn() {
+
+  const email = $('#emailInput')?.value?.trim();
+
+  const password = $('#passwordInput')?.value;
+
+
+
+  if (!email || !password) {
+
+    showMessage('Preencha e-mail e senha.');
+
+    return;
+
+  }
+
+
+
+  const { error } = await supabase.auth.signInWithPassword({
+
+    email,
+
+    password
+
+  });
+
+
+
+  if (error) {
+
+    showMessage(error.message);
+
+    return;
+
+  }
+
+
+
+  showMessage('Login realizado.');
+
+}
+
+
+
+async function signOut() {
+
+  await leaveRoom();
+
+
+
+  const { error } = await supabase.auth.signOut();
+
+
+
+  if (error) {
+
+    showMessage(error.message);
+
+    return;
+
+  }
+
+
+
+  currentUser = null;
+
+  showMessage('Você saiu da conta.');
+
+}
+
+
+
+// ======================================================
+
+// UTILITÁRIOS
+
+// ======================================================
+
+
+
+function showMessage(message) {
+
+  console.log(message);
+
+
+
+  const element = $('#message');
+
+
+
+  if (element) {
+
+    element.textContent = message;
+
+    element.style.display = 'block';
+
+
+
+    clearTimeout(element._hideTimer);
+
+
+
+    element._hideTimer = setTimeout(() => {
+
+      element.style.display = 'none';
+
+    }, 4000);
+
+  }
+
+}
+
+
+
+function onResize() {
+
+  if (!camera || !renderer || !cssRenderer) return;
+
+
+
+  camera.aspect = window.innerWidth / window.innerHeight;
+
   camera.updateProjectionMatrix();
 
-  renderer.setSize(innerWidth, innerHeight);
-  cssRenderer.setSize(innerWidth, innerHeight);
+
+
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  cssRenderer.setSize(window.innerWidth, window.innerHeight);
+
 }
 
-window.addEventListener('resize', resize);
+
+
+// ======================================================
+
+// LIMPEZA
+
+// ======================================================
+
+
 
 window.addEventListener('beforeunload', () => {
+
   clearInterval(heartbeatTimer);
+
+
 
   stopVoice();
 
+
+
   if (localObjectUrl) {
+
     URL.revokeObjectURL(localObjectUrl);
+
   }
+
 });
 
+
+
+// ======================================================
+
+// ANIMAÇÃO
+
+// ======================================================
+
+
+
 function animate() {
+
   requestAnimationFrame(animate);
 
+
+
+  if (videoTexture) {
+
+    videoTexture.needsUpdate = true;
+
+  }
+
+
+
   renderer.render(scene, camera);
+
   cssRenderer.render(scene, camera);
+
 }
 
-animate();
+
+
+// ======================================================
+
+// VOZ
+
+// ======================================================
+
+
+
+async function startVoice() {
+
+  try {
+
+    localStream = await navigator.mediaDevices.getUserMedia({
+
+      audio: true,
+
+      video: false
+
+    });
+
+
+
+    if (!currentRoom) return;
+
+
+
+    voiceChannel = supabase.channel(`voice-${currentRoom.id}`);
+
+
+
+    voiceChannel.subscribe();
+
+  } catch (error) {
+
+    console.error('Erro ao iniciar voz:', error);
+
+    showMessage('Não foi possível acessar o microfone.');
+
+  }
+
+}
+
+
+
+function stopVoice() {
+
+  if (localStream) {
+
+    localStream.getTracks().forEach(track => track.stop());
+
+    localStream = null;
+
+  }
+
+
+
+  for (const connection of peerConnections.values()) {
+
+    connection.close();
+
+  }
+
+
+
+  peerConnections.clear();
+
+
+
+  if (voiceChannel) {
+
+    supabase.removeChannel(voiceChannel);
+
+    voiceChannel = null;
+
+  }
+
+}
+
+
+
+// ======================================================
+
+// INICIAR
+
+// ======================================================
+
+
+
+init();
