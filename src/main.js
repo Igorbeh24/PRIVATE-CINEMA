@@ -1618,6 +1618,7 @@ loader.load(
 
         if (obj.name === SCREEN_NAME) {
           screenMesh = obj;
+originalScreenVisible = obj.visible;
 
           originalScreenMaterial = Array.isArray(obj.material)
             ? obj.material.map(m => m.clone())
