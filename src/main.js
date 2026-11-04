@@ -365,10 +365,28 @@ async function loadYouTubeVideo(videoId, remote = false) {
   disposeCurrentVideo();
   youtubeVideoId = videoId;
 
+  // Wrapper que permanece dentro do CSS3DObject
   const container = document.createElement('div');
-  container.style.cssText = 'width:1920px;height:1080px;background:#000';
+
+  container.style.cssText = `
+    width: 1920px;
+    height: 1080px;
+    background: #000;
+    overflow: hidden;
+  `;
+
+  // A API do YouTube substituirá este elemento interno,
+  // sem remover o wrapper usado pelo CSS3DRenderer.
+  const playerElement = document.createElement('div');
+
+  playerElement.id = `youtube-player-${Date.now()}`;
+  playerElement.style.width = '1920px';
+  playerElement.style.height = '1080px';
+
+  container.appendChild(playerElement);
 
   embeddedObject = new CSS3DObject(container);
+
   embeddedObject.position.copy(SCREEN_CENTER);
   embeddedObject.position.x += 0.012;
   embeddedObject.rotation.y = Math.PI / 2;
@@ -390,7 +408,7 @@ async function loadYouTubeVideo(videoId, remote = false) {
 
   await new Promise((resolve, reject) => {
     try {
-      youtubePlayer = new YT.Player(container, {
+      youtubePlayer = new YT.Player(playerElement.id, {
         width: '1920',
         height: '1080',
         videoId,
@@ -409,6 +427,7 @@ async function loadYouTubeVideo(videoId, remote = false) {
         events: {
           onReady: () => {
             youtubeReady = true;
+
             nowPlaying.textContent = 'YOUTUBE NO TELÃO';
             updatePlaybackUI();
 
@@ -428,6 +447,7 @@ async function loadYouTubeVideo(videoId, remote = false) {
 
             if (event.data === YT.PlayerState.PLAYING) {
               publishPlayback('playing', undefined, true);
+
             } else if (
               event.data === YT.PlayerState.PAUSED ||
               event.data === YT.PlayerState.ENDED
@@ -445,6 +465,7 @@ async function loadYouTubeVideo(videoId, remote = false) {
           }
         }
       });
+
     } catch (error) {
       reject(error);
     }
