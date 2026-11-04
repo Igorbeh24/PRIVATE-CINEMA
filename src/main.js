@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
@@ -24,10 +25,13 @@ const SCREEN_HEIGHT = 7.0;
 
 const SEAT_CONFIG = {
   total: 13,
+  // Uma única fileira
   columns: 13,
+  // Posição da primeira cadeira
   startX: 6.6,
   startY: 2.65,
   startZ: -3.15,
+  // Distância entre cada cadeira
   columnSpacing: 0.525,
   showNumbers: true,
   markerHeight: 0.8,
@@ -143,7 +147,11 @@ function createSeatLabel(number, position) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  ctx.fillText(String(number).padStart(2, '0'), 256, 80);
+  ctx.fillText(
+    String(number).padStart(2, '0'),
+    256,
+    80
+  );
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -166,6 +174,7 @@ function createSeatLabel(number, position) {
   );
 
   sprite.renderOrder = 999;
+
   seatMarkers.add(sprite);
 
   console.log(
@@ -202,12 +211,6 @@ let videoTexture = null;
 let embeddedObject = null;
 let localObjectUrl = null;
 
-// YouTube IFrame Player API
-let youtubePlayer = null;
-let youtubeReady = false;
-let youtubeVideoId = null;
-let youtubeApiPromise = null;
-
 let yaw = Math.PI / 2;
 
 let pitch = Math.atan2(
@@ -230,8 +233,6 @@ let lastPlaybackWrite = 0;
 let lastLoadedRemoteMedia = null;
 let pendingSharedMediaUrl = null;
 let isSeeking = false;
-let playbackSyncTimer = null;
-let lastRemotePlaybackSyncAt = 0;
 
 let localStream = null;
 
@@ -286,18 +287,6 @@ function setCameraToSeat(seatNumber) {
 // ======================================================
 
 function disposeCurrentVideo() {
-  if (youtubePlayer) {
-    try {
-      youtubePlayer.destroy();
-    } catch (error) {
-      console.warn('Erro ao fechar player do YouTube:', error);
-    }
-  }
-
-  youtubePlayer = null;
-  youtubeReady = false;
-  youtubeVideoId = null;
-
   if (videoElement) {
     videoElement.pause();
     videoElement.removeAttribute('src');
@@ -321,178 +310,6 @@ function disposeCurrentVideo() {
   }
 }
 
-function loadYouTubeAPI() {
-  if (window.YT && window.YT.Player) return Promise.resolve();
-  if (youtubeApiPromise) return youtubeApiPromise;
-
-  youtubeApiPromise = new Promise((resolve, reject) => {
-    const previousCallback = window.onYouTubeIframeAPIReady;
-
-    window.onYouTubeIframeAPIReady = () => {
-      if (typeof previousCallback === 'function') {
-        previousCallback();
-      }
-
-      resolve();
-    };
-
-    let script = document.querySelector(
-      'script[src="https://www.youtube.com/iframe_api"]'
-    );
-
-    if (!script) {
-      script = document.createElement('script');
-      script.src = 'https://www.youtube.com/iframe_api';
-
-      script.onerror = () => {
-        reject(new Error('Não foi possível carregar a API do YouTube.'));
-      };
-
-      document.head.appendChild(script);
-    }
-  });
-
-  return youtubeApiPromise;
-}
-
-
-async function loadYouTubeVideo(videoId, remote = false) {
-  try {
-    await loadYouTubeAPI();
-
-    disposeCurrentVideo();
-    youtubeVideoId = videoId;
-
-    const container = document.createElement('div');
-    container.style.cssText =
-      'width:1920px;height:1080px;background:#000';
-
-    embeddedObject = new CSS3DObject(container);
-    embeddedObject.position.copy(SCREEN_CENTER);
-    embeddedObject.position.x += 0.012;
-    embeddedObject.rotation.y = Math.PI / 2;
-
-    embeddedObject.scale.set(
-      SCREEN_WIDTH / 1920,
-      SCREEN_HEIGHT / 1080,
-      1
-    );
-
-    scene.add(embeddedObject);
-
-    if (screenMesh) {
-      screenMesh.material = new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        side: THREE.DoubleSide
-      });
-    }
-
-    await new Promise((resolve, reject) => {
-      let finished = false;
-
-      const timeout = setTimeout(() => {
-        if (finished) return;
-        finished = true;
-        reject(new Error(
-          'O YouTube demorou demais para carregar. Tente novamente.'
-        ));
-      }, 20000);
-
-      youtubePlayer = new YT.Player(container, {
-        width: '1920',
-        height: '1080',
-        videoId,
-
-        playerVars: {
-          autoplay: 0,
-          controls: 0,
-          disablekb: 1,
-          fs: 0,
-          playsinline: 1,
-          rel: 0,
-          enablejsapi: 1,
-          origin: window.location.origin
-        },
-
-        events: {
-          onReady: () => {
-            if (finished) return;
-
-            finished = true;
-            clearTimeout(timeout);
-
-            youtubeReady = true;
-
-            nowPlaying.textContent = 'YOUTUBE NO TELÃO';
-
-            updatePlaybackUI();
-
-            if (!remote) {
-              showToast('YouTube carregado! Clique em reproduzir.');
-            }
-
-            resolve();
-          },
-
-          onStateChange: event => {
-            updatePlaybackUI();
-
-            if (
-              !currentRoom ||
-              !isHost() ||
-              isApplyingRemotePlayback
-            ) {
-              return;
-            }
-
-            if (event.data === YT.PlayerState.PLAYING) {
-              publishPlayback('playing', undefined, true);
-            } else if (
-              event.data === YT.PlayerState.PAUSED ||
-              event.data === YT.PlayerState.ENDED
-            ) {
-              publishPlayback('paused', undefined, true);
-            }
-          },
-
-          onError: event => {
-            console.error('Erro do YouTube:', event.data);
-
-            const errors = {
-              2: 'O endereço do vídeo é inválido.',
-              5: 'O vídeo não pôde ser reproduzido neste player.',
-              100: 'Vídeo privado, removido ou não encontrado.',
-              101: 'O proprietário não permite vídeos incorporados.',
-              150: 'O proprietário não permite vídeos incorporados.',
-              153: 'O YouTube não recebeu informações de origem válidas.'
-            };
-
-            showToast(
-              errors[event.data] ||
-              'Não foi possível carregar este vídeo do YouTube.'
-            );
-
-            if (!finished) {
-              finished = true;
-              clearTimeout(timeout);
-              reject(new Error(
-                errors[event.data] ||
-                'Erro ao carregar o vídeo do YouTube.'
-              ));
-            }
-          }
-        }
-      });
-    });
-
-  } catch (error) {
-    youtubeReady = false;
-    updatePlaybackUI();
-    throw error;
-  }
-}
-
-
 function makeEmbeddedScreen(url) {
   const frame = document.createElement('iframe');
 
@@ -506,13 +323,13 @@ function makeEmbeddedScreen(url) {
   frame.title = 'Vídeo no telão do cinema';
   frame.src = url;
 
-  frame.style.cssText =
-    'width:1920px;height:1080px;border:0;background:#000';
+  frame.style.cssText = 'width:1920px;height:1080px;border:0;background:#000';
 
   embeddedObject = new CSS3DObject(frame);
 
   embeddedObject.position.copy(SCREEN_CENTER);
   embeddedObject.position.x += 0.012;
+
   embeddedObject.rotation.y = Math.PI / 2;
 
   embeddedObject.scale.set(
@@ -565,8 +382,7 @@ function parseVideoLink(raw) {
 
     return {
       provider: 'youtube',
-      id,
-      src: `https://www.youtube-nocookie.com/embed/${id}`
+      src: `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&controls=1&rel=0&modestbranding=1`
     };
   }
 
@@ -590,9 +406,7 @@ function parseVideoLink(raw) {
     };
   }
 
-  throw new Error(
-    'Use YouTube, Vimeo ou um link direto .mp4, .webm ou .ogg.'
-  );
+  throw new Error('Use YouTube, Vimeo ou um link direto .mp4, .webm ou .ogg.');
 }
 
 function playDirectVideo(src, title = 'VÍDEO EXTERNO', remote = false) {
@@ -608,9 +422,7 @@ function playDirectVideo(src, title = 'VÍDEO EXTERNO', remote = false) {
   video.preload = 'auto';
 
   video.addEventListener('error', () => {
-    showToast(
-      'Não foi possível carregar o vídeo. Verifique se o link é público e permite reprodução externa.'
-    );
+    showToast('Não foi possível carregar o vídeo. Verifique se o link é público e permite reprodução externa.');
   }, { once: true });
 
   videoElement = video;
@@ -663,8 +475,9 @@ async function loadVideoLink(raw, fromRemote = false) {
     }
 
     if (parsed.provider === 'file') {
-      pendingSharedMediaUrl =
-        currentRoom && !fromRemote ? parsed.src : null;
+      // O link precisa ser público e acessível pelos navegadores dos convidados.
+      // Arquivos locais selecionados pelo computador não são compartilháveis.
+      pendingSharedMediaUrl = currentRoom && !fromRemote ? parsed.src : null;
 
       playDirectVideo(parsed.src, raw, fromRemote);
 
@@ -674,23 +487,19 @@ async function loadVideoLink(raw, fromRemote = false) {
 
       pendingSharedMediaUrl = null;
 
-    } else if (parsed.provider === 'youtube') {
-      await loadYouTubeVideo(parsed.id, fromRemote);
-
-      if (currentRoom && !fromRemote) {
-        await publishPlayback('paused', raw, true);
-        showToast('YouTube compartilhado com a sala.');
-      }
-
     } else {
       disposeCurrentVideo();
       makeEmbeddedScreen(parsed.src);
 
-      nowPlaying.textContent = 'VIMEO NO TELÃO';
+      nowPlaying.textContent = parsed.provider === 'youtube'
+        ? 'YOUTUBE NO TELÃO'
+        : 'VIMEO NO TELÃO';
 
       if (currentRoom && !fromRemote) {
-        await publishPlayback('paused', raw, true);
-        showToast('Link do Vimeo enviado para a sala.');
+        // O link é distribuído para quem já está na sala e para quem entrar depois.
+        await publishPlayback('playing', raw, true);
+
+        showToast('Link enviado para a sala. YouTube/Vimeo ainda não sincronizam pausa e posição.');
       } else {
         showToast('Player carregado no telão.');
       }
@@ -752,12 +561,14 @@ function renderMembers() {
 
   roomMembers.forEach(member => {
     const li = document.createElement('li');
+
     const name = document.createElement('span');
 
     name.textContent = member.display_name +
       (member.user_id === currentRoom?.host_id ? ' · anfitrião' : '');
 
     const seat = document.createElement('small');
+
     seat.textContent = `ASSENTO ${member.seat_number}`;
 
     li.append(name, seat);
@@ -770,6 +581,7 @@ function renderMembers() {
   updatePlaybackUI();
 
   $('#hostControls').hidden = !isHost();
+
   $('#roomCodeDisplay').textContent = currentRoom?.code || '------';
 }
 
@@ -816,6 +628,7 @@ async function joinRoom() {
     await ensureAuth();
 
     const code = $('#joinCode').value.trim().toUpperCase();
+
     const name = $('#displayName').value.trim() || 'Visitante';
 
     const seat = $('#seatChoice').value
@@ -853,9 +666,12 @@ async function enterRoom(room, member) {
   $('#roomHud').hidden = false;
 
   $('#roomRole').textContent = isHost() ? 'ANFITRIÃO' : 'CONVIDADO';
+
   $('#leaveRoomBtn').disabled = false;
 
+  // Busca o estado mais recente antes de iniciar a sincronização.
   await refreshRoomState();
+
   await subscribeRoom();
 
   heartbeatTimer = setInterval(() => {
@@ -864,6 +680,7 @@ async function enterRoom(room, member) {
 
   $('#roomHud').classList.add('visible');
 
+  // Quem entrar depois recebe o vídeo e a posição atual.
   if (currentRoom.media_url) {
     await applyRemoteRoomPlayback(currentRoom);
   }
@@ -925,9 +742,6 @@ async function subscribeRoom() {
         renderMembers();
       }
     )
-    .on('broadcast', { event: 'playback-sync' }, ({ payload }) => {
-      receivePlaybackSync(payload);
-    })
     .on('broadcast', { event: 'rtc-signal' }, ({ payload }) => {
       handleSignal(payload);
     })
@@ -947,7 +761,6 @@ async function subscribeRoom() {
       });
 
       setRoomStatus('CONECTADO');
-      startPlaybackSync();
 
     } else if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') {
       setRoomStatus('RECONectando…');
@@ -959,182 +772,20 @@ async function subscribeRoom() {
 // SINCRONIZAÇÃO DA REPRODUÇÃO
 // ======================================================
 
-function startPlaybackSync() {
-  clearInterval(playbackSyncTimer);
-  playbackSyncTimer = null;
-
-  if (!currentRoom || !isHost()) return;
-
-  playbackSyncTimer = setInterval(() => {
-    broadcastPlaybackSync();
-  }, 1200);
-}
-
-function getMediaPosition() {
-  if (youtubePlayer && youtubeReady) {
-    return youtubePlayer.getCurrentTime() || 0;
-  }
-
-  if (videoElement && Number.isFinite(videoElement.currentTime)) {
-    return videoElement.currentTime;
-  }
-
-  return Number(currentRoom?.playback_position || 0);
-}
-
-function getMediaPaused() {
-  if (youtubePlayer && youtubeReady) {
-    return youtubePlayer.getPlayerState() !== YT.PlayerState.PLAYING;
-  }
-
-  return !videoElement || videoElement.paused;
-}
-
-async function broadcastPlaybackSync() {
-  if (!currentRoom || !isHost() || !roomChannel || isSeeking) return;
-  if (!videoElement && !(youtubePlayer && youtubeReady)) return;
-
-  const sentAt = Date.now();
-
-  try {
-    await roomChannel.send({
-      type: 'broadcast',
-      event: 'playback-sync',
-      payload: {
-        media_url: currentRoom.media_url,
-        playback_status: getMediaPaused() ? 'paused' : 'playing',
-        playback_position: getMediaPosition(),
-        sent_at: sentAt
-      }
-    });
-  } catch (error) {
-    console.warn('Erro no broadcast de reprodução:', error);
-  }
-}
-
-async function receivePlaybackSync(payload) {
-  if (!payload || isHost() || !currentRoom) return;
-
-  const sentAt = Number(payload.sent_at) || Date.now();
-
-  if (sentAt < lastRemotePlaybackSyncAt) return;
-
-  lastRemotePlaybackSyncAt = sentAt;
-
-  const media = payload.media_url || currentRoom.media_url;
-
-  if (!media) return;
-
-  const status =
-    payload.playback_status === 'paused' ? 'paused' : 'playing';
-
-  const basePosition = Math.max(
-    0,
-    Number(payload.playback_position) || 0
-  );
-
-  const elapsed = status === 'playing'
-    ? Math.max(0, (Date.now() - sentAt) / 1000)
-    : 0;
-
-  const expected = basePosition + elapsed;
-
-  if (
-    media !== lastLoadedRemoteMedia ||
-    (!videoElement && !youtubeReady)
-  ) {
-    currentRoom = { ...currentRoom, media_url: media };
-
-    await applyRemoteRoomPlayback({
-      ...currentRoom,
-      media_url: media,
-      playback_status: status,
-      playback_position: basePosition,
-      playback_updated_at: new Date(sentAt).toISOString()
-    });
-
-    return;
-  }
-
-  if (youtubePlayer && youtubeReady) {
-    isApplyingRemotePlayback = true;
-
-    try {
-      const current = youtubePlayer.getCurrentTime() || 0;
-
-      if (Math.abs(current - expected) > 1.5) {
-        youtubePlayer.seekTo(expected, true);
-      }
-
-      if (status === 'playing') {
-        youtubePlayer.playVideo();
-      } else {
-        youtubePlayer.pauseVideo();
-      }
-
-      updatePlaybackUI();
-
-    } finally {
-      setTimeout(() => {
-        isApplyingRemotePlayback = false;
-      }, 400);
-    }
-
-    return;
-  }
-
-  const video = videoElement;
-
-  if (!video || video.readyState < 1) return;
-
-  isApplyingRemotePlayback = true;
-
-  try {
-    const duration = Number.isFinite(video.duration)
-      ? video.duration
-      : Infinity;
-
-    const target = Math.min(expected, duration);
-
-    if (!isSeeking && Math.abs(video.currentTime - target) > 0.55) {
-      video.currentTime = target;
-    }
-
-    if (status === 'playing') {
-      if (video.paused) {
-        await video.play();
-      }
-    } else if (!video.paused) {
-      video.pause();
-    }
-
-    updatePlaybackUI();
-
-  } catch (error) {
-    console.warn(
-      'Não foi possível aplicar a sincronização remota:',
-      error
-    );
-
-  } finally {
-    isApplyingRemotePlayback = false;
-  }
-}
-
-async function publishPlayback(
-  status,
-  mediaUrl = undefined,
-  force = false
-) {
+async function publishPlayback(status, mediaUrl = undefined, force = false) {
   if (!currentRoom || !isHost() || isApplyingRemotePlayback) return;
 
   const now = Date.now();
 
+  // Eventos de play, pause e seek são importantes:
+  // não podem ser descartados por uma janela de debounce.
   if (!force && now - lastPlaybackWrite < 250) return;
 
   lastPlaybackWrite = now;
 
-  const position = getMediaPosition();
+  const position = videoElement && Number.isFinite(videoElement.currentTime)
+    ? videoElement.currentTime
+    : Number(currentRoom.playback_position || 0);
 
   const { data, error } = await supabase.rpc('set_room_playback', {
     p_status: status,
@@ -1150,21 +801,18 @@ async function publishPlayback(
     return;
   }
 
+  // Mantém o estado local atualizado mesmo que o Realtime demore.
   if (data && typeof data === 'object') {
     currentRoom = { ...currentRoom, ...data };
   } else {
     currentRoom = {
       ...currentRoom,
-      media_url: mediaUrl === undefined
-        ? currentRoom.media_url
-        : mediaUrl,
+      media_url: mediaUrl === undefined ? currentRoom.media_url : mediaUrl,
       playback_status: status,
       playback_position: position,
       playback_updated_at: new Date().toISOString()
     };
   }
-
-  await broadcastPlaybackSync();
 }
 
 async function waitForVideoMetadata(video) {
@@ -1178,10 +826,7 @@ async function waitForVideoMetadata(video) {
 
     const onError = () => {
       cleanup();
-
-      reject(new Error(
-        'O vídeo não carregou. Confira se o link é público e permite reprodução externa.'
-      ));
+      reject(new Error('O vídeo não carregou. Confira se o link é público e permite reprodução externa.'));
     };
 
     const cleanup = () => {
@@ -1203,27 +848,32 @@ async function applyRemoteRoomPlayback(room) {
     if (media !== lastLoadedRemoteMedia) {
       const parsed = parseVideoLink(media);
 
+      disposeCurrentVideo();
+
       if (parsed.provider === 'file') {
         playDirectVideo(parsed.src, media, true);
         lastLoadedRemoteMedia = media;
 
-        await waitForVideoMetadata(videoElement);
-
-      } else if (parsed.provider === 'youtube') {
-        await loadYouTubeVideo(parsed.id, true);
-        lastLoadedRemoteMedia = media;
+        const video = videoElement;
+        await waitForVideoMetadata(video);
 
       } else {
-        disposeCurrentVideo();
         makeEmbeddedScreen(parsed.src);
 
-        nowPlaying.textContent = 'VIMEO NO TELÃO';
+        nowPlaying.textContent = parsed.provider === 'youtube'
+          ? 'YOUTUBE NO TELÃO'
+          : 'VIMEO NO TELÃO';
+
         lastLoadedRemoteMedia = media;
 
-        showToast('O anfitrião compartilhou um vídeo do Vimeo.');
+        showToast('O anfitrião compartilhou um vídeo. Player carregado.');
         return;
       }
     }
+
+    if (!videoElement) return;
+
+    const video = videoElement;
 
     const updatedAt = room.playback_updated_at
       ? new Date(room.playback_updated_at).getTime()
@@ -1233,67 +883,42 @@ async function applyRemoteRoomPlayback(room) {
       ? Math.max(0, (Date.now() - updatedAt) / 1000)
       : 0;
 
-    const expected = Math.max(
-      0,
-      Number(room.playback_position || 0) + elapsed
-    );
+    const basePosition = Number(room.playback_position || 0);
+    const expected = basePosition + elapsed;
 
     isApplyingRemotePlayback = true;
 
-    if (youtubePlayer && youtubeReady) {
-      const current = youtubePlayer.getCurrentTime() || 0;
+    if (Number.isFinite(expected) && video.readyState >= 1) {
+      const duration = Number.isFinite(video.duration)
+        ? video.duration
+        : expected;
 
-      if (Math.abs(current - expected) > 1.5) {
-        youtubePlayer.seekTo(expected, true);
+      const target = Math.min(expected, duration);
+
+      if (Math.abs(video.currentTime - target) > 0.8) {
+        video.currentTime = target;
       }
+    }
 
-      if (room.playback_status === 'playing') {
-        youtubePlayer.playVideo();
-      } else {
-        youtubePlayer.pauseVideo();
+    if (room.playback_status === 'playing') {
+      try {
+        await video.play();
+      } catch {
+        showToast('Clique em reproduzir para liberar o áudio neste navegador.');
       }
-
-    } else if (videoElement) {
-      const video = videoElement;
-
-      if (video.readyState >= 1) {
-        const duration = Number.isFinite(video.duration)
-          ? video.duration
-          : expected;
-
-        const target = Math.min(expected, duration);
-
-        if (Math.abs(video.currentTime - target) > 0.8) {
-          video.currentTime = target;
-        }
-      }
-
-      if (room.playback_status === 'playing') {
-        try {
-          await video.play();
-        } catch {
-          showToast(
-            'Clique em reproduzir para liberar o vídeo neste navegador.'
-          );
-        }
-      } else {
-        video.pause();
-      }
+    } else {
+      video.pause();
     }
 
     updatePlaybackUI();
 
   } catch (error) {
     console.error('Erro ao sincronizar vídeo:', error);
-
-    showToast(
-      error.message || 'Não foi possível sincronizar o vídeo.'
-    );
-
+    showToast(error.message || 'Não foi possível sincronizar o vídeo.');
   } finally {
     setTimeout(() => {
       isApplyingRemotePlayback = false;
-    }, 400);
+    }, 350);
   }
 }
 
@@ -1301,11 +926,6 @@ async function leaveRoom() {
   try {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
-
-    clearInterval(playbackSyncTimer);
-    playbackSyncTimer = null;
-
-    lastRemotePlaybackSyncAt = 0;
 
     stopVoice();
 
@@ -1331,6 +951,7 @@ async function leaveRoom() {
   $('#roomGate').hidden = false;
 
   camera.position.copy(CAMERA_START);
+
   yaw = Math.PI / 2;
 
   pitch = Math.atan2(
@@ -1609,6 +1230,7 @@ loader.load(
 
     scene.add(model);
 
+    // Cria as marcações numeradas depois de carregar o modelo
     updateSeatMarkers();
 
     if (!screenMesh) {
@@ -1738,35 +1360,23 @@ a$('#fullscreenBtn')?.addEventListener('click', async () => {
 // ======================================================
 
 a$('#playPauseBtn')?.addEventListener('click', async () => {
-  if (!videoElement && !(youtubePlayer && youtubeReady)) {
-    return showToast('Carregue um vídeo primeiro.');
+  if (!videoElement) {
+    return showToast('O controle de pausa funciona com links diretos MP4, WebM ou OGG.');
   }
 
+  // Convidados podem clicar apenas para liberar o autoplay bloqueado pelo navegador.
+  // O estado oficial de play/pause continua sendo controlado pelo anfitrião.
   if (currentRoom && !isHost()) {
-    if (youtubePlayer && youtubeReady) {
-      youtubePlayer.playVideo();
-    } else if (videoElement) {
-      try {
-        await videoElement.play();
-      } catch {
-        showToast('Clique novamente para liberar a reprodução.');
-      }
+    try {
+      await videoElement.play();
+    } catch {
+      showToast('O navegador bloqueou a reprodução. Tente clicar novamente.');
     }
 
     return;
   }
 
   try {
-    if (youtubePlayer && youtubeReady) {
-      if (getMediaPaused()) {
-        youtubePlayer.playVideo();
-      } else {
-        youtubePlayer.pauseVideo();
-      }
-
-      return;
-    }
-
     if (videoElement.paused) {
       await videoElement.play();
       await publishPlayback('playing', undefined, true);
@@ -1774,7 +1384,6 @@ a$('#playPauseBtn')?.addEventListener('click', async () => {
       videoElement.pause();
       await publishPlayback('paused', undefined, true);
     }
-
   } catch (error) {
     showToast(`Não foi possível alterar a reprodução: ${error.message}`);
   }
@@ -1793,20 +1402,11 @@ a$('#seekBar')?.addEventListener('pointerup', () => {
 });
 
 a$('#seekBar')?.addEventListener('input', event => {
-  if (
-    (!videoElement && !(youtubePlayer && youtubeReady)) ||
-    (currentRoom && !isHost())
-  ) {
-    return;
-  }
+  if (!videoElement || (currentRoom && !isHost())) return;
 
   const value = Number(event.target.value);
 
-  if (!Number.isFinite(value)) return;
-
-  if (youtubePlayer && youtubeReady) {
-    youtubePlayer.seekTo(value, true);
-  } else if (videoElement) {
+  if (Number.isFinite(value)) {
     videoElement.currentTime = value;
   }
 });
@@ -1814,14 +1414,9 @@ a$('#seekBar')?.addEventListener('input', event => {
 a$('#seekBar')?.addEventListener('change', async () => {
   isSeeking = false;
 
-  if (
-    (!videoElement && !(youtubePlayer && youtubeReady)) ||
-    (currentRoom && !isHost())
-  ) {
-    return;
-  }
+  if (!videoElement || (currentRoom && !isHost())) return;
 
-  const status = getMediaPaused() ? 'paused' : 'playing';
+  const status = videoElement.paused ? 'paused' : 'playing';
 
   await publishPlayback(status, undefined, true);
 });
@@ -1841,7 +1436,9 @@ a$('#closeRoomGate')?.addEventListener('click', () => {
 });
 
 a$('#createRoomBtn')?.addEventListener('click', createRoom);
+
 a$('#joinRoomBtn')?.addEventListener('click', joinRoom);
+
 a$('#leaveRoomBtn')?.addEventListener('click', leaveRoom);
 
 a$('#copyCodeBtn')?.addEventListener('click', async () => {
@@ -1869,43 +1466,32 @@ a$('#roomMovieBtn')?.addEventListener('click', () => {
 // INTERFACE DE REPRODUÇÃO
 // ======================================================
 
-
 function updatePlaybackUI() {
   const button = $('#playPauseBtn');
   const seek = $('#seekBar');
 
   if (!button || !seek) return;
 
-  const hasYouTube = !!youtubePlayer && youtubeReady;
-  const hasMedia = !!videoElement || hasYouTube;
+  const hasDirectVideo = !!videoElement;
+  const canControlSeek = hasDirectVideo && (!currentRoom || isHost());
 
-  const canControlSeek =
-    hasMedia && (!currentRoom || isHost());
-
-  // O botão continua clicável, mesmo durante o carregamento.
-  button.disabled = false;
-
+  button.disabled = !hasDirectVideo;
   seek.disabled = !canControlSeek;
 
   button.textContent =
-    hasMedia && !getMediaPaused()
+    videoElement && !videoElement.paused
       ? 'Ⅱ PAUSAR'
       : '▶ REPRODUZIR';
 
-  if (!hasMedia) {
+  if (!videoElement) {
     seek.min = '0';
     seek.max = '100';
     seek.value = '0';
     return;
   }
 
-  const duration = hasYouTube
-    ? (youtubePlayer.getDuration() || 0)
-    : videoElement.duration;
-
-  const currentTime = hasYouTube
-    ? (youtubePlayer.getCurrentTime() || 0)
-    : videoElement.currentTime;
+  const duration = videoElement.duration;
+  const currentTime = videoElement.currentTime;
 
   seek.min = '0';
   seek.step = '0.1';
@@ -1914,11 +1500,11 @@ function updatePlaybackUI() {
     seek.max = String(duration);
   }
 
+  // Não puxa a bolinha de volta enquanto o usuário está arrastando.
   if (!isSeeking && Number.isFinite(currentTime)) {
     seek.value = String(currentTime);
   }
 }
-
 
 // ======================================================
 // UTILITÁRIOS E ANIMAÇÃO
@@ -1940,7 +1526,6 @@ window.addEventListener('resize', resize);
 
 window.addEventListener('beforeunload', () => {
   clearInterval(heartbeatTimer);
-  clearInterval(playbackSyncTimer);
 
   stopVoice();
 
