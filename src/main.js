@@ -563,10 +563,8 @@ function makeEmbeddedScreen(url) {
   scene.add(embeddedObject);
 
   if (screenMesh) {
-    screenMesh.material = new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      side: THREE.DoubleSide
-    });
+    screenMesh.visible = false;
+});
   }
 }
 // ======================================================
