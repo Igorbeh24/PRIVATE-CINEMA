@@ -24,13 +24,10 @@ const SCREEN_HEIGHT = 7.0;
 
 const SEAT_CONFIG = {
   total: 13,
-  // Uma única fileira
   columns: 13,
-  // Posição da primeira cadeira
   startX: 6.6,
   startY: 2.65,
   startZ: -3.15,
-  // Distância entre cada cadeira
   columnSpacing: 0.525,
   showNumbers: true,
   markerHeight: 0.8,
@@ -146,11 +143,7 @@ function createSeatLabel(number, position) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  ctx.fillText(
-    String(number).padStart(2, '0'),
-    256,
-    80
-  );
+  ctx.fillText(String(number).padStart(2, '0'), 256, 80);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -173,7 +166,6 @@ function createSeatLabel(number, position) {
   );
 
   sprite.renderOrder = 999;
-
   seatMarkers.add(sprite);
 
   console.log(
@@ -209,6 +201,12 @@ let videoElement = null;
 let videoTexture = null;
 let embeddedObject = null;
 let localObjectUrl = null;
+
+// YouTube IFrame Player API
+let youtubePlayer = null;
+let youtubeReady = false;
+let youtubeVideoId = null;
+let youtubeApiPromise = null;
 
 let yaw = Math.PI / 2;
 
@@ -288,6 +286,18 @@ function setCameraToSeat(seatNumber) {
 // ======================================================
 
 function disposeCurrentVideo() {
+  if (youtubePlayer) {
+    try {
+      youtubePlayer.destroy();
+    } catch (error) {
+      console.warn('Erro ao fechar player do YouTube:', error);
+    }
+  }
+
+  youtubePlayer = null;
+  youtubeReady = false;
+  youtubeVideoId = null;
+
   if (videoElement) {
     videoElement.pause();
     videoElement.removeAttribute('src');
@@ -311,6 +321,136 @@ function disposeCurrentVideo() {
   }
 }
 
+function loadYouTubeAPI() {
+  if (window.YT && window.YT.Player) return Promise.resolve();
+  if (youtubeApiPromise) return youtubeApiPromise;
+
+  youtubeApiPromise = new Promise((resolve, reject) => {
+    const previousCallback = window.onYouTubeIframeAPIReady;
+
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof previousCallback === 'function') {
+        previousCallback();
+      }
+
+      resolve();
+    };
+
+    let script = document.querySelector(
+      'script[src="https://www.youtube.com/iframe_api"]'
+    );
+
+    if (!script) {
+      script = document.createElement('script');
+      script.src = 'https://www.youtube.com/iframe_api';
+
+      script.onerror = () => {
+        reject(new Error('Não foi possível carregar a API do YouTube.'));
+      };
+
+      document.head.appendChild(script);
+    }
+  });
+
+  return youtubeApiPromise;
+}
+
+async function loadYouTubeVideo(videoId, remote = false) {
+  await loadYouTubeAPI();
+
+  if (youtubePlayer && youtubeVideoId === videoId && youtubeReady) {
+    return;
+  }
+
+  disposeCurrentVideo();
+  youtubeVideoId = videoId;
+
+  const container = document.createElement('div');
+  container.style.cssText = 'width:1920px;height:1080px;background:#000';
+
+  embeddedObject = new CSS3DObject(container);
+  embeddedObject.position.copy(SCREEN_CENTER);
+  embeddedObject.position.x += 0.012;
+  embeddedObject.rotation.y = Math.PI / 2;
+
+  embeddedObject.scale.set(
+    SCREEN_WIDTH / 1920,
+    SCREEN_HEIGHT / 1080,
+    1
+  );
+
+  scene.add(embeddedObject);
+
+  if (screenMesh) {
+    screenMesh.material = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      side: THREE.DoubleSide
+    });
+  }
+
+  await new Promise((resolve, reject) => {
+    try {
+      youtubePlayer = new YT.Player(container, {
+        width: '1920',
+        height: '1080',
+        videoId,
+
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          playsinline: 1,
+          rel: 0,
+          enablejsapi: 1,
+          origin: window.location.origin
+        },
+
+        events: {
+          onReady: () => {
+            youtubeReady = true;
+            nowPlaying.textContent = 'YOUTUBE NO TELÃO';
+            updatePlaybackUI();
+
+            if (!remote) {
+              showToast('YouTube carregado no telão.');
+            }
+
+            resolve();
+          },
+
+          onStateChange: event => {
+            updatePlaybackUI();
+
+            if (!currentRoom || !isHost() || isApplyingRemotePlayback) {
+              return;
+            }
+
+            if (event.data === YT.PlayerState.PLAYING) {
+              publishPlayback('playing', undefined, true);
+            } else if (
+              event.data === YT.PlayerState.PAUSED ||
+              event.data === YT.PlayerState.ENDED
+            ) {
+              publishPlayback('paused', undefined, true);
+            }
+          },
+
+          onError: event => {
+            console.error('Erro do YouTube:', event.data);
+
+            showToast(
+              'Este vídeo não permite reprodução incorporada ou está indisponível.'
+            );
+          }
+        }
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 function makeEmbeddedScreen(url) {
   const frame = document.createElement('iframe');
 
@@ -324,13 +464,13 @@ function makeEmbeddedScreen(url) {
   frame.title = 'Vídeo no telão do cinema';
   frame.src = url;
 
-  frame.style.cssText = 'width:1920px;height:1080px;border:0;background:#000';
+  frame.style.cssText =
+    'width:1920px;height:1080px;border:0;background:#000';
 
   embeddedObject = new CSS3DObject(frame);
 
   embeddedObject.position.copy(SCREEN_CENTER);
   embeddedObject.position.x += 0.012;
-
   embeddedObject.rotation.y = Math.PI / 2;
 
   embeddedObject.scale.set(
@@ -383,7 +523,8 @@ function parseVideoLink(raw) {
 
     return {
       provider: 'youtube',
-      src: `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&controls=1&rel=0&modestbranding=1`
+      id,
+      src: `https://www.youtube-nocookie.com/embed/${id}`
     };
   }
 
@@ -407,7 +548,9 @@ function parseVideoLink(raw) {
     };
   }
 
-  throw new Error('Use YouTube, Vimeo ou um link direto .mp4, .webm ou .ogg.');
+  throw new Error(
+    'Use YouTube, Vimeo ou um link direto .mp4, .webm ou .ogg.'
+  );
 }
 
 function playDirectVideo(src, title = 'VÍDEO EXTERNO', remote = false) {
@@ -423,7 +566,9 @@ function playDirectVideo(src, title = 'VÍDEO EXTERNO', remote = false) {
   video.preload = 'auto';
 
   video.addEventListener('error', () => {
-    showToast('Não foi possível carregar o vídeo. Verifique se o link é público e permite reprodução externa.');
+    showToast(
+      'Não foi possível carregar o vídeo. Verifique se o link é público e permite reprodução externa.'
+    );
   }, { once: true });
 
   videoElement = video;
@@ -476,9 +621,8 @@ async function loadVideoLink(raw, fromRemote = false) {
     }
 
     if (parsed.provider === 'file') {
-      // O link precisa ser público e acessível pelos navegadores dos convidados.
-      // Arquivos locais selecionados pelo computador não são compartilháveis.
-      pendingSharedMediaUrl = currentRoom && !fromRemote ? parsed.src : null;
+      pendingSharedMediaUrl =
+        currentRoom && !fromRemote ? parsed.src : null;
 
       playDirectVideo(parsed.src, raw, fromRemote);
 
@@ -488,25 +632,62 @@ async function loadVideoLink(raw, fromRemote = false) {
 
       pendingSharedMediaUrl = null;
 
+    } else if (parsed.provider === 'youtube') {
+      await loadYouTubeVideo(parsed.id, fromRemote);
+
+      if (currentRoom && !fromRemote) {
+        await publishPlayback('paused', raw, true);
+        showToast('YouTube compartilhado com a sala.');
+      }
+
     } else {
       disposeCurrentVideo();
       makeEmbeddedScreen(parsed.src);
 
-      nowPlaying.textContent = parsed.provider === 'youtube'
-        ? 'YOUTUBE NO TELÃO'
-        : 'VIMEO NO TELÃO';
+      nowPlaying.textContent = 'VIMEO NO TELÃO';
 
       if (currentRoom && !fromRemote) {
-        // O link é distribuído para quem já está na sala e para quem entrar depois.
-        await publishPlayback('playing', raw, true);
-
-        showToast('Link enviado para a sala. YouTube/Vimeo ainda não sincronizam pausa e posição.');
+        await publishPlayback('paused', raw, true);
+        showToast('Link do Vimeo enviado para a sala.');
       } else {
         showToast('Player carregado no telão.');
       }
     }
 
     panel.classList.remove('open');
+    message.textContent = 'Vídeo carregado.';
+
+  } catch (error) {
+    pendingSharedMediaUrl = null;
+    message.textContent = error.message;
+    showToast(error.message);
+  }
+}
+
+function loadLocalFile(file) {
+  if (!file) return;
+
+  if (currentRoom) {
+    showToast(
+      'Arquivos locais não podem ser compartilhados. Use um link público MP4/WebM.'
+    );
+    return;
+  }
+
+  if (!file.type.startsWith('video/')) {
+    showToast('Escolha um arquivo de vídeo.');
+    return;
+  }
+
+  if (localObjectUrl) {
+    URL.revokeObjectURL(localObjectUrl);
+  }
+
+  localObjectUrl = URL.createObjectURL(file);
+
+  playDirectVideo(localObjectUrl, file.name);
+
+      panel.classList.remove('open');
     message.textContent = 'Vídeo carregado.';
 
   } catch (error) {
@@ -562,14 +743,12 @@ function renderMembers() {
 
   roomMembers.forEach(member => {
     const li = document.createElement('li');
-
     const name = document.createElement('span');
 
     name.textContent = member.display_name +
       (member.user_id === currentRoom?.host_id ? ' · anfitrião' : '');
 
     const seat = document.createElement('small');
-
     seat.textContent = `ASSENTO ${member.seat_number}`;
 
     li.append(name, seat);
@@ -582,7 +761,6 @@ function renderMembers() {
   updatePlaybackUI();
 
   $('#hostControls').hidden = !isHost();
-
   $('#roomCodeDisplay').textContent = currentRoom?.code || '------';
 }
 
@@ -629,7 +807,6 @@ async function joinRoom() {
     await ensureAuth();
 
     const code = $('#joinCode').value.trim().toUpperCase();
-
     const name = $('#displayName').value.trim() || 'Visitante';
 
     const seat = $('#seatChoice').value
@@ -667,12 +844,9 @@ async function enterRoom(room, member) {
   $('#roomHud').hidden = false;
 
   $('#roomRole').textContent = isHost() ? 'ANFITRIÃO' : 'CONVIDADO';
-
   $('#leaveRoomBtn').disabled = false;
 
-  // Busca o estado mais recente antes de iniciar a sincronização.
   await refreshRoomState();
-
   await subscribeRoom();
 
   heartbeatTimer = setInterval(() => {
@@ -681,7 +855,6 @@ async function enterRoom(room, member) {
 
   $('#roomHud').classList.add('visible');
 
-  // Quem entrar depois recebe o vídeo e a posição atual.
   if (currentRoom.media_url) {
     await applyRemoteRoomPlayback(currentRoom);
   }
@@ -783,20 +956,34 @@ function startPlaybackSync() {
 
   if (!currentRoom || !isHost()) return;
 
-  // O Broadcast transmite a posição sem fazer UPDATE no banco a cada segundo.
   playbackSyncTimer = setInterval(() => {
     broadcastPlaybackSync();
   }, 1200);
 }
 
+function getMediaPosition() {
+  if (youtubePlayer && youtubeReady) {
+    return youtubePlayer.getCurrentTime() || 0;
+  }
+
+  if (videoElement && Number.isFinite(videoElement.currentTime)) {
+    return videoElement.currentTime;
+  }
+
+  return Number(currentRoom?.playback_position || 0);
+}
+
+function getMediaPaused() {
+  if (youtubePlayer && youtubeReady) {
+    return youtubePlayer.getPlayerState() !== YT.PlayerState.PLAYING;
+  }
+
+  return !videoElement || videoElement.paused;
+}
+
 async function broadcastPlaybackSync() {
-  if (
-    !currentRoom ||
-    !isHost() ||
-    !roomChannel ||
-    !videoElement ||
-    isSeeking
-  ) return;
+  if (!currentRoom || !isHost() || !roomChannel || isSeeking) return;
+  if (!videoElement && !(youtubePlayer && youtubeReady)) return;
 
   const sentAt = Date.now();
 
@@ -806,8 +993,8 @@ async function broadcastPlaybackSync() {
       event: 'playback-sync',
       payload: {
         media_url: currentRoom.media_url,
-        playback_status: videoElement.paused ? 'paused' : 'playing',
-        playback_position: Math.max(0, Number(videoElement.currentTime) || 0),
+        playback_status: getMediaPaused() ? 'paused' : 'playing',
+        playback_position: getMediaPosition(),
         sent_at: sentAt
       }
     });
@@ -820,22 +1007,35 @@ async function receivePlaybackSync(payload) {
   if (!payload || isHost() || !currentRoom) return;
 
   const sentAt = Number(payload.sent_at) || Date.now();
+
   if (sentAt < lastRemotePlaybackSyncAt) return;
+
   lastRemotePlaybackSyncAt = sentAt;
 
   const media = payload.media_url || currentRoom.media_url;
+
   if (!media) return;
 
-  const status = payload.playback_status === 'paused' ? 'paused' : 'playing';
-  const basePosition = Math.max(0, Number(payload.playback_position) || 0);
+  const status =
+    payload.playback_status === 'paused' ? 'paused' : 'playing';
+
+  const basePosition = Math.max(
+    0,
+    Number(payload.playback_position) || 0
+  );
+
   const elapsed = status === 'playing'
     ? Math.max(0, (Date.now() - sentAt) / 1000)
     : 0;
+
   const expected = basePosition + elapsed;
 
-  // Se o anfitrião trocou de vídeo, carrega a nova mídia antes de sincronizar.
-  if (media !== lastLoadedRemoteMedia || !videoElement) {
+  if (
+    media !== lastLoadedRemoteMedia ||
+    (!videoElement && !youtubeReady)
+  ) {
     currentRoom = { ...currentRoom, media_url: media };
+
     await applyRemoteRoomPlayback({
       ...currentRoom,
       media_url: media,
@@ -843,19 +1043,50 @@ async function receivePlaybackSync(payload) {
       playback_position: basePosition,
       playback_updated_at: new Date(sentAt).toISOString()
     });
+
+    return;
+  }
+
+  if (youtubePlayer && youtubeReady) {
+    isApplyingRemotePlayback = true;
+
+    try {
+      const current = youtubePlayer.getCurrentTime() || 0;
+
+      if (Math.abs(current - expected) > 1.5) {
+        youtubePlayer.seekTo(expected, true);
+      }
+
+      if (status === 'playing') {
+        youtubePlayer.playVideo();
+      } else {
+        youtubePlayer.pauseVideo();
+      }
+
+      updatePlaybackUI();
+
+    } finally {
+      setTimeout(() => {
+        isApplyingRemotePlayback = false;
+      }, 400);
+    }
+
     return;
   }
 
   const video = videoElement;
+
   if (!video || video.readyState < 1) return;
 
   isApplyingRemotePlayback = true;
 
   try {
-    const duration = Number.isFinite(video.duration) ? video.duration : Infinity;
+    const duration = Number.isFinite(video.duration)
+      ? video.duration
+      : Infinity;
+
     const target = Math.min(expected, duration);
 
-    // Corrige apenas desvios perceptíveis para evitar saltos constantes.
     if (!isSeeking && Math.abs(video.currentTime - target) > 0.55) {
       video.currentTime = target;
     }
@@ -869,27 +1100,32 @@ async function receivePlaybackSync(payload) {
     }
 
     updatePlaybackUI();
+
   } catch (error) {
-    console.warn('Não foi possível aplicar a sincronização remota:', error);
+    console.warn(
+      'Não foi possível aplicar a sincronização remota:',
+      error
+    );
+
   } finally {
     isApplyingRemotePlayback = false;
   }
 }
 
-async function publishPlayback(status, mediaUrl = undefined, force = false) {
+async function publishPlayback(
+  status,
+  mediaUrl = undefined,
+  force = false
+) {
   if (!currentRoom || !isHost() || isApplyingRemotePlayback) return;
 
   const now = Date.now();
 
-  // Eventos de play, pause e seek são importantes:
-  // não podem ser descartados por uma janela de debounce.
   if (!force && now - lastPlaybackWrite < 250) return;
 
   lastPlaybackWrite = now;
 
-  const position = videoElement && Number.isFinite(videoElement.currentTime)
-    ? videoElement.currentTime
-    : Number(currentRoom.playback_position || 0);
+  const position = getMediaPosition();
 
   const { data, error } = await supabase.rpc('set_room_playback', {
     p_status: status,
@@ -905,20 +1141,20 @@ async function publishPlayback(status, mediaUrl = undefined, force = false) {
     return;
   }
 
-  // Mantém o estado local atualizado mesmo que o Realtime demore.
   if (data && typeof data === 'object') {
     currentRoom = { ...currentRoom, ...data };
   } else {
     currentRoom = {
       ...currentRoom,
-      media_url: mediaUrl === undefined ? currentRoom.media_url : mediaUrl,
+      media_url: mediaUrl === undefined
+        ? currentRoom.media_url
+        : mediaUrl,
       playback_status: status,
       playback_position: position,
       playback_updated_at: new Date().toISOString()
     };
   }
 
-  // Atualização imediata para os convidados; o banco continua guardando o estado durável.
   await broadcastPlaybackSync();
 }
 
@@ -933,7 +1169,10 @@ async function waitForVideoMetadata(video) {
 
     const onError = () => {
       cleanup();
-      reject(new Error('O vídeo não carregou. Confira se o link é público e permite reprodução externa.'));
+
+      reject(new Error(
+        'O vídeo não carregou. Confira se o link é público e permite reprodução externa.'
+      ));
     };
 
     const cleanup = () => {
@@ -955,32 +1194,27 @@ async function applyRemoteRoomPlayback(room) {
     if (media !== lastLoadedRemoteMedia) {
       const parsed = parseVideoLink(media);
 
-      disposeCurrentVideo();
-
       if (parsed.provider === 'file') {
         playDirectVideo(parsed.src, media, true);
         lastLoadedRemoteMedia = media;
 
-        const video = videoElement;
-        await waitForVideoMetadata(video);
+        await waitForVideoMetadata(videoElement);
 
-      } else {
-        makeEmbeddedScreen(parsed.src);
-
-        nowPlaying.textContent = parsed.provider === 'youtube'
-          ? 'YOUTUBE NO TELÃO'
-          : 'VIMEO NO TELÃO';
-
+      } else if (parsed.provider === 'youtube') {
+        await loadYouTubeVideo(parsed.id, true);
         lastLoadedRemoteMedia = media;
 
-        showToast('O anfitrião compartilhou um vídeo. Player carregado.');
+      } else {
+        disposeCurrentVideo();
+        makeEmbeddedScreen(parsed.src);
+
+        nowPlaying.textContent = 'VIMEO NO TELÃO';
+        lastLoadedRemoteMedia = media;
+
+        showToast('O anfitrião compartilhou um vídeo do Vimeo.');
         return;
       }
     }
-
-    if (!videoElement) return;
-
-    const video = videoElement;
 
     const updatedAt = room.playback_updated_at
       ? new Date(room.playback_updated_at).getTime()
@@ -990,42 +1224,67 @@ async function applyRemoteRoomPlayback(room) {
       ? Math.max(0, (Date.now() - updatedAt) / 1000)
       : 0;
 
-    const basePosition = Number(room.playback_position || 0);
-    const expected = basePosition + elapsed;
+    const expected = Math.max(
+      0,
+      Number(room.playback_position || 0) + elapsed
+    );
 
     isApplyingRemotePlayback = true;
 
-    if (Number.isFinite(expected) && video.readyState >= 1) {
-      const duration = Number.isFinite(video.duration)
-        ? video.duration
-        : expected;
+    if (youtubePlayer && youtubeReady) {
+      const current = youtubePlayer.getCurrentTime() || 0;
 
-      const target = Math.min(expected, duration);
-
-      if (Math.abs(video.currentTime - target) > 0.8) {
-        video.currentTime = target;
+      if (Math.abs(current - expected) > 1.5) {
+        youtubePlayer.seekTo(expected, true);
       }
-    }
 
-    if (room.playback_status === 'playing') {
-      try {
-        await video.play();
-      } catch {
-        showToast('Clique em reproduzir para liberar o áudio neste navegador.');
+      if (room.playback_status === 'playing') {
+        youtubePlayer.playVideo();
+      } else {
+        youtubePlayer.pauseVideo();
       }
-    } else {
-      video.pause();
+
+    } else if (videoElement) {
+      const video = videoElement;
+
+      if (video.readyState >= 1) {
+        const duration = Number.isFinite(video.duration)
+          ? video.duration
+          : expected;
+
+        const target = Math.min(expected, duration);
+
+        if (Math.abs(video.currentTime - target) > 0.8) {
+          video.currentTime = target;
+        }
+      }
+
+      if (room.playback_status === 'playing') {
+        try {
+          await video.play();
+        } catch {
+          showToast(
+            'Clique em reproduzir para liberar o vídeo neste navegador.'
+          );
+        }
+      } else {
+        video.pause();
+      }
     }
 
     updatePlaybackUI();
 
   } catch (error) {
     console.error('Erro ao sincronizar vídeo:', error);
-    showToast(error.message || 'Não foi possível sincronizar o vídeo.');
+
+    showToast(
+      error.message || 'Não foi possível sincronizar o vídeo.'
+    );
+
   } finally {
     setTimeout(() => {
       isApplyingRemotePlayback = false;
-    }, 350);
+    }, 400);
   }
 }
 
@@ -1033,8 +1292,10 @@ async function leaveRoom() {
   try {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
+
     clearInterval(playbackSyncTimer);
     playbackSyncTimer = null;
+
     lastRemotePlaybackSyncAt = 0;
 
     stopVoice();
@@ -1061,7 +1322,6 @@ async function leaveRoom() {
   $('#roomGate').hidden = false;
 
   camera.position.copy(CAMERA_START);
-
   yaw = Math.PI / 2;
 
   pitch = Math.atan2(
@@ -1340,7 +1600,6 @@ loader.load(
 
     scene.add(model);
 
-    // Cria as marcações numeradas depois de carregar o modelo
     updateSeatMarkers();
 
     if (!screenMesh) {
@@ -1470,23 +1729,35 @@ a$('#fullscreenBtn')?.addEventListener('click', async () => {
 // ======================================================
 
 a$('#playPauseBtn')?.addEventListener('click', async () => {
-  if (!videoElement) {
-    return showToast('O controle de pausa funciona com links diretos MP4, WebM ou OGG.');
+  if (!videoElement && !(youtubePlayer && youtubeReady)) {
+    return showToast('Carregue um vídeo primeiro.');
   }
 
-  // Convidados podem clicar apenas para liberar o autoplay bloqueado pelo navegador.
-  // O estado oficial de play/pause continua sendo controlado pelo anfitrião.
   if (currentRoom && !isHost()) {
-    try {
-      await videoElement.play();
-    } catch {
-      showToast('O navegador bloqueou a reprodução. Tente clicar novamente.');
+    if (youtubePlayer && youtubeReady) {
+      youtubePlayer.playVideo();
+    } else if (videoElement) {
+      try {
+        await videoElement.play();
+      } catch {
+        showToast('Clique novamente para liberar a reprodução.');
+      }
     }
 
     return;
   }
 
   try {
+    if (youtubePlayer && youtubeReady) {
+      if (getMediaPaused()) {
+        youtubePlayer.playVideo();
+      } else {
+        youtubePlayer.pauseVideo();
+      }
+
+      return;
+    }
+
     if (videoElement.paused) {
       await videoElement.play();
       await publishPlayback('playing', undefined, true);
@@ -1494,6 +1765,7 @@ a$('#playPauseBtn')?.addEventListener('click', async () => {
       videoElement.pause();
       await publishPlayback('paused', undefined, true);
     }
+
   } catch (error) {
     showToast(`Não foi possível alterar a reprodução: ${error.message}`);
   }
@@ -1512,11 +1784,20 @@ a$('#seekBar')?.addEventListener('pointerup', () => {
 });
 
 a$('#seekBar')?.addEventListener('input', event => {
-  if (!videoElement || (currentRoom && !isHost())) return;
+  if (
+    (!videoElement && !(youtubePlayer && youtubeReady)) ||
+    (currentRoom && !isHost())
+  ) {
+    return;
+  }
 
   const value = Number(event.target.value);
 
-  if (Number.isFinite(value)) {
+  if (!Number.isFinite(value)) return;
+
+  if (youtubePlayer && youtubeReady) {
+    youtubePlayer.seekTo(value, true);
+  } else if (videoElement) {
     videoElement.currentTime = value;
   }
 });
@@ -1524,9 +1805,14 @@ a$('#seekBar')?.addEventListener('input', event => {
 a$('#seekBar')?.addEventListener('change', async () => {
   isSeeking = false;
 
-  if (!videoElement || (currentRoom && !isHost())) return;
+  if (
+    (!videoElement && !(youtubePlayer && youtubeReady)) ||
+    (currentRoom && !isHost())
+  ) {
+    return;
+  }
 
-  const status = videoElement.paused ? 'paused' : 'playing';
+  const status = getMediaPaused() ? 'paused' : 'playing';
 
   await publishPlayback(status, undefined, true);
 });
@@ -1546,9 +1832,7 @@ a$('#closeRoomGate')?.addEventListener('click', () => {
 });
 
 a$('#createRoomBtn')?.addEventListener('click', createRoom);
-
 a$('#joinRoomBtn')?.addEventListener('click', joinRoom);
-
 a$('#leaveRoomBtn')?.addEventListener('click', leaveRoom);
 
 a$('#copyCodeBtn')?.addEventListener('click', async () => {
@@ -1582,26 +1866,32 @@ function updatePlaybackUI() {
 
   if (!button || !seek) return;
 
-  const hasDirectVideo = !!videoElement;
-  const canControlSeek = hasDirectVideo && (!currentRoom || isHost());
+  const hasYouTube = !!youtubePlayer && youtubeReady;
+  const hasMedia = !!videoElement || hasYouTube;
+  const canControlSeek = hasMedia && (!currentRoom || isHost());
 
-  button.disabled = !hasDirectVideo;
+  button.disabled = !hasMedia;
   seek.disabled = !canControlSeek;
 
   button.textContent =
-    videoElement && !videoElement.paused
+    hasMedia && !getMediaPaused()
       ? 'Ⅱ PAUSAR'
       : '▶ REPRODUZIR';
 
-  if (!videoElement) {
+  if (!hasMedia) {
     seek.min = '0';
     seek.max = '100';
     seek.value = '0';
     return;
   }
 
-  const duration = videoElement.duration;
-  const currentTime = videoElement.currentTime;
+  const duration = hasYouTube
+    ? (youtubePlayer.getDuration() || 0)
+    : videoElement.duration;
+
+  const currentTime = hasYouTube
+    ? (youtubePlayer.getCurrentTime() || 0)
+    : videoElement.currentTime;
 
   seek.min = '0';
   seek.step = '0.1';
@@ -1610,7 +1900,6 @@ function updatePlaybackUI() {
     seek.max = String(duration);
   }
 
-  // Não puxa a bolinha de volta enquanto o usuário está arrastando.
   if (!isSeeking && Number.isFinite(currentTime)) {
     seek.value = String(currentTime);
   }
