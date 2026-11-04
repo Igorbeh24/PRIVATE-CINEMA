@@ -290,45 +290,48 @@ function setCameraToSeat(seatNumber) {
 // ======================================================
 
 function disposeCurrentVideo() {
-  if (videoElement) {
-    videoElement.pause();
-    videoElement.removeAttribute('src');
-    videoElement.load();
-    videoElement = null;
-  }
-
-  if (videoTexture) {
-    videoTexture.dispose();
-    videoTexture = null;
-  }
-
-  if (youtubeSyncTimer) {
-    clearInterval(youtubeSyncTimer);
-    youtubeSyncTimer = null;
-  }
-
-  if (youtubePlayer) {
-    try {
-      youtubePlayer.destroy();
-    } catch (error) {
-      console.warn(error);
+    if (videoElement) {
+        videoElement.pause();
+        videoElement.removeAttribute('src');
+        videoElement.load();
+        videoElement = null;
     }
 
-    youtubePlayer = null;
-  }
+    if (videoTexture) {
+        videoTexture.dispose();
+        videoTexture = null;
+    }
 
-  youtubeReady = false;
-  youtubeCurrentId = null;
+    if (youtubeSyncTimer) {
+        clearInterval(youtubeSyncTimer);
+        youtubeSyncTimer = null;
+    }
 
-  if (embeddedObject) {
-    scene.remove(embeddedObject);
-    embeddedObject.element.remove();
-    embeddedObject = null;
-  }
+    if (youtubePlayer) {
+        try {
+            youtubePlayer.destroy();
+        } catch (error) {
+            console.warn(error);
+        }
 
-if (screenMesh && originalScreenMaterial) {
-    screenMesh.material = originalScreenMaterial;
-    screenMesh.visible = originalScreenVisible;
+        youtubePlayer = null;
+    }
+
+    youtubeReady = false;
+    youtubeCurrentId = null;
+
+    if (embeddedObject) {
+        scene.remove(embeddedObject);
+        embeddedObject.element.remove();
+        embeddedObject = null;
+    }
+
+    if (screenMesh && originalScreenMaterial) {
+        screenMesh.material = originalScreenMaterial;
+        screenMesh.visible = originalScreenVisible;
+    }
+
+    renderer.domElement.style.visibility = 'visible';
 }
 }
 
