@@ -201,6 +201,7 @@ function updateSeatMarkers() {
 
 let screenMesh = null;
 let originalScreenMaterial = null;
+let originalScreenVisible = true;
 
 let videoElement = null;
 let videoTexture = null;
@@ -400,12 +401,9 @@ async function makeYouTubeScreen(videoId) {
 
   scene.add(embeddedObject);
 
-  if (screenMesh) {
-    screenMesh.material = new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      side: THREE.DoubleSide
-    });
-  }
+ if (screenMesh) {
+    screenMesh.visible = false;
+}
 
   youtubeCurrentId = videoId;
   nowPlaying.textContent = 'YOUTUBE NO TELÃO';
