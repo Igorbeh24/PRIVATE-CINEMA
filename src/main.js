@@ -451,7 +451,13 @@ async function makeYouTubeScreen(videoId) {
                 },
 
                 onError: event => {
-                    console.error('YouTube Player error:', event.data);
+                    renderer.domElement.style.visibility = 'visible';
+
+                    console.error(
+                        'YouTube Player error:',
+                        event.data
+                    );
+
                     showToast(`Erro do YouTube (${event.data}).`);
                 }
             }
@@ -459,7 +465,10 @@ async function makeYouTubeScreen(videoId) {
 
     } catch (error) {
         renderer.domElement.style.visibility = 'visible';
-        showToast(error.message || 'Erro ao iniciar o YouTube.');
+
+        showToast(
+            error.message || 'Erro ao iniciar o YouTube.'
+        );
     }
 }
 
