@@ -1870,7 +1870,7 @@ function updatePlaybackUI() {
   const hasMedia = !!videoElement || hasYouTube;
   const canControlSeek = hasMedia && (!currentRoom || isHost());
 
-  button.disabled = false;
+  button.disabled = true;
   seek.disabled = !canControlSeek;
 
   button.textContent =
