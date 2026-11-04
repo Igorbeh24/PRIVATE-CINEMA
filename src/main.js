@@ -379,31 +379,85 @@ function loadYouTubeAPI() {
 }
 
 async function makeYouTubeScreen(videoId) {
-  disposeCurrentVideo();
+    disposeCurrentVideo();
 
-  const container = document.createElement('div');
+    renderer.domElement.style.visibility = 'hidden';
 
-  container.id = 'privateCinemaYouTubePlayer';
+    const container = document.createElement('div');
 
-  container.style.cssText =
-    'width:1920px;height:1080px;background:#000;overflow:hidden';
+    container.id = 'privateCinemaYouTubePlayer';
 
-  embeddedObject = new CSS3DObject(container);
+    container.style.cssText =
+        'width:1920px;height:1080px;background:#000;overflow:hidden';
 
-  embeddedObject.position.copy(SCREEN_CENTER);
-  embeddedObject.position.x += 0.012;
-  embeddedObject.rotation.y = -Math.PI / 2;
+    embeddedObject = new CSS3DObject(container);
 
-  embeddedObject.scale.set(
-    SCREEN_WIDTH / 1920,
-    SCREEN_HEIGHT / 1080,
-    1
-  );
+    embeddedObject.position.copy(SCREEN_CENTER);
+    embeddedObject.position.x += 0.012;
+    embeddedObject.rotation.y = Math.PI / 2;
 
-  scene.add(embeddedObject);
+    embeddedObject.scale.set(
+        SCREEN_WIDTH / 1920,
+        SCREEN_HEIGHT / 1080,
+        1
+    );
 
- if (screenMesh) {
-    screenMesh.visible = false;
+    scene.add(embeddedObject);
+
+    if (screenMesh) {
+        screenMesh.visible = false;
+    }
+
+    youtubeCurrentId = videoId;
+    nowPlaying.textContent = 'YOUTUBE NO TELÃO';
+
+    try {
+        const YT = await loadYouTubeAPI();
+
+        if (youtubeCurrentId !== videoId || !container.isConnected) {
+            renderer.domElement.style.visibility = 'visible';
+            return;
+        }
+
+        youtubePlayer = new YT.Player(container, {
+            width: '1920',
+            height: '1080',
+            videoId,
+
+            playerVars: {
+                autoplay: 1,
+                controls: 1,
+                rel: 0,
+                playsinline: 1,
+                enablejsapi: 1,
+                origin: window.location.origin
+            },
+
+            events: {
+                onReady: event => {
+                    if (youtubeCurrentId !== videoId) return;
+
+                    youtubeReady = true;
+                    updatePlaybackUI();
+
+                    event.target.playVideo();
+                },
+
+                onStateChange: () => {
+                    updatePlaybackUI();
+                },
+
+                onError: event => {
+                    console.error('YouTube Player error:', event.data);
+                    showToast(`Erro do YouTube (${event.data}).`);
+                }
+            }
+        });
+
+    } catch (error) {
+        renderer.domElement.style.visibility = 'visible';
+        showToast(error.message || 'Erro ao iniciar o YouTube.');
+    }
 }
 
   youtubeCurrentId = videoId;
