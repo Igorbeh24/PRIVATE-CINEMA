@@ -326,9 +326,10 @@ function disposeCurrentVideo() {
     embeddedObject = null;
   }
 
-  if (screenMesh && originalScreenMaterial) {
+if (screenMesh && originalScreenMaterial) {
     screenMesh.material = originalScreenMaterial;
-  }
+    screenMesh.visible = originalScreenVisible;
+}
 }
 
 // ======================================================
