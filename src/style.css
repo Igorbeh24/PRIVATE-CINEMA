@@ -9,3 +9,17 @@
 @media(max-width:650px){.topbar{height:60px;padding:0 16px}.top-status{display:none}.mini-room-btn{font-size:7px;padding:9px}.welcome{left:8vw;right:8vw}.welcome h1{font-size:56px}.welcome p{font-size:12px}.bottom-controls{padding:0 14px;min-height:62px}.control-btn{padding:10px 9px;font-size:7px}.now-playing{display:none}.hint{bottom:82px;font-size:8px;max-width:92vw;white-space:normal}.player-panel{right:4vw;bottom:76px;padding:19px}.room-columns{grid-template-columns:1fr}.room-card{padding:20px;max-height:88vh}.room-hud{top:70px;right:10px;width:min(270px,calc(100vw - 20px));padding:13px}.room-gate{padding:10px}}
 
 .playback-controls{display:flex;align-items:center;gap:10px;flex:1;max-width:330px}.playback-btn{white-space:nowrap}.control-btn:disabled{opacity:.35;cursor:not-allowed}.playback-controls input{width:100%;accent-color:#c6a77b;cursor:pointer}.playback-controls input:disabled{opacity:.3;cursor:not-allowed}@media(max-width:650px){.playback-controls{max-width:145px;gap:5px}.playback-btn{font-size:6px;padding:9px 6px}.playback-controls input{min-width:45px}.now-playing{display:none}}
+#css3d {
+    z-index: 9999 !important;
+    pointer-events: auto !important;
+}
+
+#css3d iframe {
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 99999 !important;
+}
+
+#scene canvas {
+    pointer-events: none !important;
+}
