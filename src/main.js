@@ -338,6 +338,10 @@ function disposeCurrentVideo() {
 // API OFICIAL DO YOUTUBE
 // ======================================================
 
+// ======================================================
+// API OFICIAL DO YOUTUBE
+// ======================================================
+
 function loadYouTubeAPI() {
   if (window.YT && window.YT.Player) {
     return Promise.resolve(window.YT);
@@ -356,17 +360,16 @@ function loadYouTubeAPI() {
       } catch (error) {
         console.warn(error);
       }
-
       resolve(window.YT);
     };
 
     let script = document.querySelector(
-      'script[src="https://www.youtube.com/iframe_api"]'
+      'script[src="https://youtube.com"]'
     );
 
     if (!script) {
       script = document.createElement('script');
-      script.src = 'https://www.youtube.com/iframe_api';
+      script.src = 'https://youtube.com';
       script.async = true;
 
       script.onerror = () => {
@@ -383,20 +386,29 @@ function loadYouTubeAPI() {
 async function makeYouTubeScreen(videoId) {
     disposeCurrentVideo();
 
-    renderer.domElement.style.visibility = 'hidden';
+    // Mantemos o WebGL visível para renderizar a sala e não quebrar cliques do mouse
+    renderer.domElement.style.visibility = 'visible';
 
+    // Cria o container principal do elemento CSS3D
     const container = document.createElement('div');
+    container.style.cssText = 'width:1920px;height:1080px;background:#000;overflow:hidden;';
+    
+    // CORREÇÃO CRÍTICA: Permite cliques e interações diretamente no vídeo dentro do mundo 3D
+    container.style.pointerEvents = 'auto';
+    cssRenderer.domElement.style.pointerEvents = 'auto';
 
-    container.id = 'privateCinemaYouTubePlayer';
-
-    container.style.cssText =
-        'width:1920px;height:1080px;background:#000;overflow:hidden';
+    // Criamos uma div interna específica para a API do YouTube injetar o <iframe>
+    const playerDiv = document.createElement('div');
+    playerDiv.id = 'youtube-inner-player';
+    container.appendChild(playerDiv);
 
     embeddedObject = new CSS3DObject(container);
 
     embeddedObject.position.copy(SCREEN_CENTER);
     embeddedObject.position.x += 0.012;
-    embeddedObject.rotation.y = Math.PI / 2;
+    
+    // CORREÇÃO DA ROTAÇÃO: Sincronizado exatamente com o ângulo funcional do seu Vimeo (-Math.PI / 2)
+    embeddedObject.rotation.y = -Math.PI / 2;
 
     embeddedObject.scale.set(
         SCREEN_WIDTH / 1920,
@@ -417,13 +429,13 @@ async function makeYouTubeScreen(videoId) {
         const YT = await loadYouTubeAPI();
 
         if (youtubeCurrentId !== videoId || !container.isConnected) {
-            renderer.domElement.style.visibility = 'visible';
             return;
         }
 
-        youtubePlayer = new YT.Player(container, {
-            width: '1920',
-            height: '1080',
+        // Alvo modificado para o playerDiv interno criado acima
+        youtubePlayer = new YT.Player(playerDiv, {
+            width: '100%',
+            height: '100%',
             videoId,
 
             playerVars: {
@@ -442,6 +454,7 @@ async function makeYouTubeScreen(videoId) {
                     youtubeReady = true;
                     updatePlaybackUI();
 
+                    // Força a reprodução
                     event.target.playVideo();
                 },
 
@@ -450,24 +463,14 @@ async function makeYouTubeScreen(videoId) {
                 },
 
                 onError: event => {
-                    renderer.domElement.style.visibility = 'visible';
-
-                    console.error(
-                        'YouTube Player error:',
-                        event.data
-                    );
-
+                    console.error('YouTube Player error:', event.data);
                     showToast(`Erro do YouTube (${event.data}).`);
                 }
             }
         });
 
     } catch (error) {
-        renderer.domElement.style.visibility = 'visible';
-
-        showToast(
-            error.message || 'Erro ao iniciar o YouTube.'
-        );
+        showToast(error.message || 'Erro ao iniciar o YouTube.');
     }
 }
 
