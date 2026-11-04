@@ -564,8 +564,7 @@ function makeEmbeddedScreen(url) {
 
   if (screenMesh) {
     screenMesh.visible = false;
-});
-  }
+}
 }
 // ======================================================
 // IDENTIFICAÇÃO DOS LINKS
