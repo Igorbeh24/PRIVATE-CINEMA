@@ -392,7 +392,7 @@ async function makeYouTubeScreen(videoId) {
 
   embeddedObject.position.copy(SCREEN_CENTER);
   embeddedObject.position.x += 0.012;
-  embeddedObject.rotation.y = Math.PI / 2;
+  embeddedObject.rotation.y = -Math.PI / 2;
 
   embeddedObject.scale.set(
     SCREEN_WIDTH / 1920,
@@ -552,7 +552,7 @@ function makeEmbeddedScreen(url) {
 
   embeddedObject.position.copy(SCREEN_CENTER);
   embeddedObject.position.x += 0.012;
-  embeddedObject.rotation.y = Math.PI / 2;
+  embeddedObject.rotation.y = -Math.PI / 2;
 
   embeddedObject.scale.set(
     SCREEN_WIDTH / 1920,
