@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
@@ -209,6 +208,12 @@ let originalScreenMaterial = null;
 let videoElement = null;
 let videoTexture = null;
 let embeddedObject = null;
+let youtubePlayer = null;
+let youtubeReady = false;
+let youtubeVideoId = null;
+let youtubeLoadToken = 0;
+let youtubeApiPromise = null;
+let lastYoutubeTime = 0;
 let localObjectUrl = null;
 
 let yaw = Math.PI / 2;
@@ -287,6 +292,21 @@ function setCameraToSeat(seatNumber) {
 // ======================================================
 
 function disposeCurrentVideo() {
+  youtubeLoadToken++;
+
+  if (youtubePlayer) {
+    try {
+      youtubePlayer.destroy();
+    } catch (error) {
+      console.warn('Não foi possível encerrar o player do YouTube:', error);
+    }
+    youtubePlayer = null;
+  }
+
+  youtubeReady = false;
+  youtubeVideoId = null;
+  lastYoutubeTime = 0;
+
   if (videoElement) {
     videoElement.pause();
     videoElement.removeAttribute('src');
@@ -306,8 +326,215 @@ function disposeCurrentVideo() {
   }
 
   if (screenMesh && originalScreenMaterial) {
-    screenMesh.material = originalScreenMaterial;
+    screenMesh.material = Array.isArray(originalScreenMaterial)
+      ? originalScreenMaterial.map(material => material.clone())
+      : originalScreenMaterial.clone();
   }
+
+  updatePlaybackUI();
+}
+
+function ensureYouTubeAPI() {
+  if (window.YT && window.YT.Player) {
+    return Promise.resolve(window.YT);
+  }
+
+  if (youtubeApiPromise) return youtubeApiPromise;
+
+  youtubeApiPromise = new Promise((resolve, reject) => {
+    const previousCallback = window.onYouTubeIframeAPIReady;
+
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof previousCallback === 'function') {
+        try { previousCallback(); } catch (error) {
+          console.warn('Callback anterior do YouTube:', error);
+        }
+      }
+      resolve(window.YT);
+    };
+
+    let script = document.querySelector('script[src="https://www.youtube.com/iframe_api"]');
+
+    if (!script) {
+      script = document.createElement('script');
+      script.src = 'https://www.youtube.com/iframe_api';
+      script.async = true;
+      document.head.appendChild(script);
+    }
+
+    const timeout = setTimeout(() => {
+      if (!(window.YT && window.YT.Player)) {
+        youtubeApiPromise = null;
+        reject(new Error('A API do YouTube demorou demais para carregar. Verifique sua conexão e tente novamente.'));
+      }
+    }, 20000);
+
+    // A API chama o callback global quando estiver pronta.
+    const checkReady = () => {
+      if (window.YT && window.YT.Player) {
+        clearTimeout(timeout);
+        resolve(window.YT);
+      }
+    };
+
+    script.addEventListener('load', checkReady, { once: true });
+    checkReady();
+  });
+
+  return youtubeApiPromise;
+}
+
+function getYouTubeState() {
+  if (!youtubePlayer || !youtubeReady || !window.YT) return -1;
+  try {
+    return youtubePlayer.getPlayerState();
+  } catch {
+    return -1;
+  }
+}
+
+function getCurrentPlaybackPosition() {
+  if (videoElement && Number.isFinite(videoElement.currentTime)) {
+    return videoElement.currentTime;
+  }
+
+  if (youtubePlayer && youtubeReady) {
+    try {
+      const time = youtubePlayer.getCurrentTime();
+      return Number.isFinite(time) ? time : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  return Number(currentRoom?.playback_position || 0);
+}
+
+function createYouTubeScreen(videoId, remote = false) {
+  const token = ++youtubeLoadToken;
+
+  const container = document.createElement('div');
+  container.id = `youtube-player-${Date.now()}`;
+  container.style.cssText = [
+    'width:1920px',
+    'height:1080px',
+    'background:#000',
+    'overflow:hidden'
+  ].join(';');
+
+  embeddedObject = new CSS3DObject(container);
+  embeddedObject.position.copy(SCREEN_CENTER);
+  embeddedObject.position.x += 0.012;
+  embeddedObject.rotation.y = Math.PI / 2;
+  embeddedObject.scale.set(
+    SCREEN_WIDTH / 1920,
+    SCREEN_HEIGHT / 1080,
+    1
+  );
+  scene.add(embeddedObject);
+
+  youtubeVideoId = videoId;
+
+  if (screenMesh) {
+    screenMesh.material = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      side: THREE.DoubleSide
+    });
+  }
+
+  nowPlaying.textContent = 'YOUTUBE NO TELÃO';
+  updatePlaybackUI();
+
+  ensureYouTubeAPI()
+    .then(YT => {
+      if (token !== youtubeLoadToken || !container.isConnected) return;
+
+      youtubePlayer = new YT.Player(container, {
+        width: '1920',
+        height: '1080',
+        videoId,
+        playerVars: {
+          autoplay: remote ? 0 : 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          playsinline: 1,
+          rel: 0,
+          modestbranding: 1,
+          iv_load_policy: 3,
+          origin: window.location.origin
+        },
+        events: {
+          onReady: event => {
+            if (token !== youtubeLoadToken) return;
+
+            youtubeReady = true;
+            lastYoutubeTime = 0;
+
+            const youtubeFrame = event.target.getIframe?.();
+            if (youtubeFrame) {
+              youtubeFrame.referrerPolicy = 'strict-origin-when-cross-origin';
+              youtubeFrame.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+              youtubeFrame.allowFullscreen = true;
+            }
+
+            updatePlaybackUI();
+
+            if (remote) {
+              if (currentRoom) applyRemoteRoomPlayback(currentRoom);
+            } else {
+              // O anfitrião iniciou a seleção do vídeo. O navegador ainda
+              // pode exigir um clique para liberar áudio/autoplay.
+              try {
+                event.target.playVideo();
+              } catch {
+                showToast('Clique em reproduzir para iniciar o vídeo.');
+              }
+            }
+          },
+
+          onStateChange: event => {
+            if (token !== youtubeLoadToken) return;
+
+            updatePlaybackUI();
+
+            if (isApplyingRemotePlayback || !currentRoom || !isHost()) return;
+
+            const states = window.YT.PlayerState;
+
+            if (event.data === states.PLAYING) {
+              publishPlayback('playing', undefined, true);
+            } else if (
+              event.data === states.PAUSED ||
+              event.data === states.ENDED
+            ) {
+              publishPlayback('paused', undefined, true);
+            }
+          },
+
+          onError: event => {
+            if (token !== youtubeLoadToken) return;
+
+            const messages = {
+              2: 'O YouTube recusou o identificador do vídeo.',
+              5: 'O vídeo não pôde ser reproduzido no player HTML5.',
+              100: 'Vídeo não encontrado ou privado.',
+              101: 'O proprietário não permite reprodução em players externos.',
+              150: 'O proprietário não permite reprodução em players externos.',
+              153: 'O YouTube não recebeu as informações de origem necessárias. Confira o domínio e a política de referência do site.'
+            };
+
+            showToast(messages[event.data] || `O YouTube retornou o erro ${event.data}.`);
+            console.error('Erro do player do YouTube:', event.data);
+          }
+        }
+      });
+    })
+    .catch(error => {
+      if (token !== youtubeLoadToken) return;
+      console.error(error);
+      showToast(error.message || 'Não foi possível carregar o player do YouTube.');
+    });
 }
 
 function makeEmbeddedScreen(url) {
@@ -382,6 +609,7 @@ function parseVideoLink(raw) {
 
     return {
       provider: 'youtube',
+      id,
       src: `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&controls=1&rel=0&modestbranding=1`
     };
   }
@@ -489,17 +717,18 @@ async function loadVideoLink(raw, fromRemote = false) {
 
     } else {
       disposeCurrentVideo();
-      makeEmbeddedScreen(parsed.src);
 
-      nowPlaying.textContent = parsed.provider === 'youtube'
-        ? 'YOUTUBE NO TELÃO'
-        : 'VIMEO NO TELÃO';
+      if (parsed.provider === 'youtube') {
+        createYouTubeScreen(parsed.id, fromRemote);
+      } else {
+        makeEmbeddedScreen(parsed.src);
+        nowPlaying.textContent = 'VIMEO NO TELÃO';
+      }
 
       if (currentRoom && !fromRemote) {
-        // O link é distribuído para quem já está na sala e para quem entrar depois.
+        // O anfitrião publica o endereço; os convidados carregam o mesmo vídeo.
         await publishPlayback('playing', raw, true);
-
-        showToast('Link enviado para a sala. YouTube/Vimeo ainda não sincronizam pausa e posição.');
+        showToast('Vídeo enviado para todos. Os comandos do YouTube serão sincronizados.');
       } else {
         showToast('Player carregado no telão.');
       }
@@ -783,9 +1012,7 @@ async function publishPlayback(status, mediaUrl = undefined, force = false) {
 
   lastPlaybackWrite = now;
 
-  const position = videoElement && Number.isFinite(videoElement.currentTime)
-    ? videoElement.currentTime
-    : Number(currentRoom.playback_position || 0);
+  const position = getCurrentPlaybackPosition();
 
   const { data, error } = await supabase.rpc('set_room_playback', {
     p_status: status,
@@ -856,24 +1083,20 @@ async function applyRemoteRoomPlayback(room) {
 
         const video = videoElement;
         await waitForVideoMetadata(video);
-
+      } else if (parsed.provider === 'youtube') {
+        lastLoadedRemoteMedia = media;
+        createYouTubeScreen(parsed.id, true);
+        // O onReady do player chama esta função novamente para aplicar
+        // a posição e o estado assim que a API estiver pronta.
+        return;
       } else {
         makeEmbeddedScreen(parsed.src);
-
-        nowPlaying.textContent = parsed.provider === 'youtube'
-          ? 'YOUTUBE NO TELÃO'
-          : 'VIMEO NO TELÃO';
-
         lastLoadedRemoteMedia = media;
-
-        showToast('O anfitrião compartilhou um vídeo. Player carregado.');
+        nowPlaying.textContent = 'VIMEO NO TELÃO';
+        showToast('O anfitrião compartilhou um vídeo do Vimeo.');
         return;
       }
     }
-
-    if (!videoElement) return;
-
-    const video = videoElement;
 
     const updatedAt = room.playback_updated_at
       ? new Date(room.playback_updated_at).getTime()
@@ -887,6 +1110,32 @@ async function applyRemoteRoomPlayback(room) {
     const expected = basePosition + elapsed;
 
     isApplyingRemotePlayback = true;
+
+    if (youtubePlayer && youtubeReady) {
+      const duration = Number(youtubePlayer.getDuration() || 0);
+      const target = duration > 0
+        ? Math.min(expected, duration)
+        : expected;
+
+      const actual = Number(youtubePlayer.getCurrentTime() || 0);
+
+      if (Number.isFinite(target) && Math.abs(actual - target) > 1.25) {
+        youtubePlayer.seekTo(target, true);
+      }
+
+      if (room.playback_status === 'playing') {
+        youtubePlayer.playVideo();
+      } else {
+        youtubePlayer.pauseVideo();
+      }
+
+      updatePlaybackUI();
+      return;
+    }
+
+    if (!videoElement) return;
+
+    const video = videoElement;
 
     if (Number.isFinite(expected) && video.readyState >= 1) {
       const duration = Number.isFinite(video.duration)
@@ -918,7 +1167,7 @@ async function applyRemoteRoomPlayback(room) {
   } finally {
     setTimeout(() => {
       isApplyingRemotePlayback = false;
-    }, 350);
+    }, 500);
   }
 }
 
@@ -1360,24 +1609,40 @@ a$('#fullscreenBtn')?.addEventListener('click', async () => {
 // ======================================================
 
 a$('#playPauseBtn')?.addEventListener('click', async () => {
-  if (!videoElement) {
-    return showToast('O controle de pausa funciona com links diretos MP4, WebM ou OGG.');
+  const hasYouTube = !!youtubePlayer && youtubeReady;
+  if (!videoElement && !hasYouTube) {
+    return showToast('O player ainda está carregando. Tente novamente em instantes.');
   }
 
-  // Convidados podem clicar apenas para liberar o autoplay bloqueado pelo navegador.
-  // O estado oficial de play/pause continua sendo controlado pelo anfitrião.
+  // O convidado pode usar o clique para liberar autoplay/áudio localmente.
+  // Apenas o anfitrião altera o estado oficial compartilhado.
   if (currentRoom && !isHost()) {
     try {
-      await videoElement.play();
+      if (hasYouTube) {
+        youtubePlayer.playVideo();
+      } else {
+        await videoElement.play();
+      }
     } catch {
       showToast('O navegador bloqueou a reprodução. Tente clicar novamente.');
     }
-
     return;
   }
 
   try {
-    if (videoElement.paused) {
+    if (hasYouTube) {
+      const state = getYouTubeState();
+      const playing = state === window.YT.PlayerState.PLAYING ||
+        state === window.YT.PlayerState.BUFFERING;
+
+      if (playing) {
+        youtubePlayer.pauseVideo();
+        await publishPlayback('paused', undefined, true);
+      } else {
+        youtubePlayer.playVideo();
+        await publishPlayback('playing', undefined, true);
+      }
+    } else if (videoElement.paused) {
       await videoElement.play();
       await publishPlayback('playing', undefined, true);
     } else {
@@ -1402,23 +1667,29 @@ a$('#seekBar')?.addEventListener('pointerup', () => {
 });
 
 a$('#seekBar')?.addEventListener('input', event => {
-  if (!videoElement || (currentRoom && !isHost())) return;
+  if (currentRoom && !isHost()) return;
 
   const value = Number(event.target.value);
+  if (!Number.isFinite(value)) return;
 
-  if (Number.isFinite(value)) {
+  if (videoElement) {
     videoElement.currentTime = value;
+  } else if (youtubePlayer && youtubeReady) {
+    youtubePlayer.seekTo(value, true);
   }
 });
 
 a$('#seekBar')?.addEventListener('change', async () => {
   isSeeking = false;
 
-  if (!videoElement || (currentRoom && !isHost())) return;
+  if (currentRoom && !isHost()) return;
+  if (!videoElement && !(youtubePlayer && youtubeReady)) return;
 
-  const status = videoElement.paused ? 'paused' : 'playing';
+  const playing = videoElement
+    ? !videoElement.paused
+    : getYouTubeState() === window.YT.PlayerState.PLAYING;
 
-  await publishPlayback(status, undefined, true);
+  await publishPlayback(playing ? 'playing' : 'paused', undefined, true);
 });
 
 // ======================================================
@@ -1472,37 +1743,53 @@ function updatePlaybackUI() {
 
   if (!button || !seek) return;
 
+  const hasYouTube = !!youtubePlayer && youtubeReady;
   const hasDirectVideo = !!videoElement;
-  const canControlSeek = hasDirectVideo && (!currentRoom || isHost());
+  const hasPlayableMedia = hasDirectVideo || hasYouTube;
+  const canControlSeek = hasPlayableMedia && (!currentRoom || isHost());
 
-  button.disabled = !hasDirectVideo;
+  button.disabled = !hasPlayableMedia;
   seek.disabled = !canControlSeek;
 
-  button.textContent =
-    videoElement && !videoElement.paused
-      ? 'Ⅱ PAUSAR'
-      : '▶ REPRODUZIR';
+  let playing = false;
+  let currentTime = 0;
+  let duration = 0;
 
-  if (!videoElement) {
-    seek.min = '0';
-    seek.max = '100';
-    seek.value = '0';
-    return;
+  if (hasDirectVideo) {
+    playing = !videoElement.paused;
+    currentTime = Number(videoElement.currentTime || 0);
+    duration = Number(videoElement.duration || 0);
+  } else if (hasYouTube) {
+    const state = getYouTubeState();
+    playing = state === window.YT.PlayerState.PLAYING ||
+      state === window.YT.PlayerState.BUFFERING;
+
+    try {
+      currentTime = Number(youtubePlayer.getCurrentTime() || 0);
+      duration = Number(youtubePlayer.getDuration() || 0);
+    } catch {
+      currentTime = 0;
+      duration = 0;
+    }
   }
 
-  const duration = videoElement.duration;
-  const currentTime = videoElement.currentTime;
+  button.textContent = playing ? 'Ⅱ PAUSAR' : '▶ REPRODUZIR';
 
   seek.min = '0';
   seek.step = '0.1';
 
-  if (Number.isFinite(duration) && duration > 0) {
+  if (duration > 0 && Number.isFinite(duration)) {
     seek.max = String(duration);
+  } else {
+    seek.max = '100';
   }
 
-  // Não puxa a bolinha de volta enquanto o usuário está arrastando.
   if (!isSeeking && Number.isFinite(currentTime)) {
     seek.value = String(currentTime);
+  }
+
+  if (!hasPlayableMedia) {
+    seek.value = '0';
   }
 }
 
@@ -1523,6 +1810,25 @@ function resize() {
 }
 
 window.addEventListener('resize', resize);
+
+// Atualiza os controles também para o player do YouTube, que não dispara
+// os eventos HTMLMediaElement usados pelos vídeos MP4.
+setInterval(() => {
+  updatePlaybackUI();
+
+  if (
+    currentRoom &&
+    isHost() &&
+    youtubePlayer &&
+    youtubeReady &&
+    getYouTubeState() === window.YT.PlayerState.PLAYING
+  ) {
+    const now = Date.now();
+    if (now - lastPlaybackWrite >= 5000) {
+      publishPlayback('playing', undefined, true);
+    }
+  }
+}, 500);
 
 window.addEventListener('beforeunload', () => {
   clearInterval(heartbeatTimer);
