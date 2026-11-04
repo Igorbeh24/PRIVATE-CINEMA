@@ -333,7 +333,6 @@ function disposeCurrentVideo() {
 
     renderer.domElement.style.visibility = 'visible';
 }
-}
 
 // ======================================================
 // API OFICIAL DO YOUTUBE
