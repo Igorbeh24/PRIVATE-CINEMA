@@ -1869,6 +1869,7 @@ a$('#roomMovieBtn')?.addEventListener('click', () => {
 // INTERFACE DE REPRODUÇÃO
 // ======================================================
 
+
 function updatePlaybackUI() {
   const button = $('#playPauseBtn');
   const seek = $('#seekBar');
@@ -1877,9 +1878,13 @@ function updatePlaybackUI() {
 
   const hasYouTube = !!youtubePlayer && youtubeReady;
   const hasMedia = !!videoElement || hasYouTube;
-  const canControlSeek = hasMedia && (!currentRoom || isHost());
 
-  button.disabled = !hasMedia;
+  const canControlSeek =
+    hasMedia && (!currentRoom || isHost());
+
+  // O botão continua clicável, mesmo durante o carregamento.
+  button.disabled = false;
+
   seek.disabled = !canControlSeek;
 
   button.textContent =
@@ -1913,6 +1918,7 @@ function updatePlaybackUI() {
     seek.value = String(currentTime);
   }
 }
+
 
 // ======================================================
 // UTILITÁRIOS E ANIMAÇÃO
