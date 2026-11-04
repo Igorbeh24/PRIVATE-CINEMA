@@ -355,41 +355,49 @@ function loadYouTubeAPI() {
   return youtubeApiPromise;
 }
 
+
 async function loadYouTubeVideo(videoId, remote = false) {
-  await loadYouTubeAPI();
+  try {
+    await loadYouTubeAPI();
 
-  if (youtubePlayer && youtubeVideoId === videoId && youtubeReady) {
-    return;
-  }
+    disposeCurrentVideo();
+    youtubeVideoId = videoId;
 
-  disposeCurrentVideo();
-  youtubeVideoId = videoId;
+    const container = document.createElement('div');
+    container.style.cssText =
+      'width:1920px;height:1080px;background:#000';
 
-  const container = document.createElement('div');
-  container.style.cssText = 'width:1920px;height:1080px;background:#000';
+    embeddedObject = new CSS3DObject(container);
+    embeddedObject.position.copy(SCREEN_CENTER);
+    embeddedObject.position.x += 0.012;
+    embeddedObject.rotation.y = Math.PI / 2;
 
-  embeddedObject = new CSS3DObject(container);
-  embeddedObject.position.copy(SCREEN_CENTER);
-  embeddedObject.position.x += 0.012;
-  embeddedObject.rotation.y = Math.PI / 2;
+    embeddedObject.scale.set(
+      SCREEN_WIDTH / 1920,
+      SCREEN_HEIGHT / 1080,
+      1
+    );
 
-  embeddedObject.scale.set(
-    SCREEN_WIDTH / 1920,
-    SCREEN_HEIGHT / 1080,
-    1
-  );
+    scene.add(embeddedObject);
 
-  scene.add(embeddedObject);
+    if (screenMesh) {
+      screenMesh.material = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        side: THREE.DoubleSide
+      });
+    }
 
-  if (screenMesh) {
-    screenMesh.material = new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      side: THREE.DoubleSide
-    });
-  }
+    await new Promise((resolve, reject) => {
+      let finished = false;
 
-  await new Promise((resolve, reject) => {
-    try {
+      const timeout = setTimeout(() => {
+        if (finished) return;
+        finished = true;
+        reject(new Error(
+          'O YouTube demorou demais para carregar. Tente novamente.'
+        ));
+      }, 20000);
+
       youtubePlayer = new YT.Player(container, {
         width: '1920',
         height: '1080',
@@ -408,12 +416,19 @@ async function loadYouTubeVideo(videoId, remote = false) {
 
         events: {
           onReady: () => {
+            if (finished) return;
+
+            finished = true;
+            clearTimeout(timeout);
+
             youtubeReady = true;
+
             nowPlaying.textContent = 'YOUTUBE NO TELÃO';
+
             updatePlaybackUI();
 
             if (!remote) {
-              showToast('YouTube carregado no telão.');
+              showToast('YouTube carregado! Clique em reproduzir.');
             }
 
             resolve();
@@ -422,7 +437,11 @@ async function loadYouTubeVideo(videoId, remote = false) {
           onStateChange: event => {
             updatePlaybackUI();
 
-            if (!currentRoom || !isHost() || isApplyingRemotePlayback) {
+            if (
+              !currentRoom ||
+              !isHost() ||
+              isApplyingRemotePlayback
+            ) {
               return;
             }
 
@@ -439,17 +458,40 @@ async function loadYouTubeVideo(videoId, remote = false) {
           onError: event => {
             console.error('Erro do YouTube:', event.data);
 
+            const errors = {
+              2: 'O endereço do vídeo é inválido.',
+              5: 'O vídeo não pôde ser reproduzido neste player.',
+              100: 'Vídeo privado, removido ou não encontrado.',
+              101: 'O proprietário não permite vídeos incorporados.',
+              150: 'O proprietário não permite vídeos incorporados.',
+              153: 'O YouTube não recebeu informações de origem válidas.'
+            };
+
             showToast(
-              'Este vídeo não permite reprodução incorporada ou está indisponível.'
+              errors[event.data] ||
+              'Não foi possível carregar este vídeo do YouTube.'
             );
+
+            if (!finished) {
+              finished = true;
+              clearTimeout(timeout);
+              reject(new Error(
+                errors[event.data] ||
+                'Erro ao carregar o vídeo do YouTube.'
+              ));
+            }
           }
         }
       });
-    } catch (error) {
-      reject(error);
-    }
-  });
+    });
+
+  } catch (error) {
+    youtubeReady = false;
+    updatePlaybackUI();
+    throw error;
+  }
 }
+
 
 function makeEmbeddedScreen(url) {
   const frame = document.createElement('iframe');
