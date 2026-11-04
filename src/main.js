@@ -14,7 +14,7 @@ const CAMERA_START = new THREE.Vector3(6.55, 2.65, 0);
 const LOOK_AT_START = new THREE.Vector3(-4.42, 3.88, 0);
 
 const SCREEN_NAME = 'Screen';
-const SCREEN_CENTER = new THREE.Vector3(-4.415, 3.8777, 0);
+const SCREEN_CENTER = new THREE.Vector3(-4.415, 3.8777, 10);
 const SCREEN_WIDTH = 12.65;
 const SCREEN_HEIGHT = 7.0;
 
