@@ -549,7 +549,7 @@ function makeEmbeddedScreen(url) {
 
   embeddedObject.position.copy(SCREEN_CENTER);
   embeddedObject.position.x += 0.012;
-  embeddedObject.position.Y += 0.012;
+  embeddedObject.position.Y += 0.10;
   embeddedObject.rotation.y = -Math.PI / 2;
 
   embeddedObject.scale.set(
