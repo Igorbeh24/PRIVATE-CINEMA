@@ -3,21 +3,22 @@
 Projeto inicial do cinema 3D com o modelo `Cine.glb`.
 
 ## Requisitos
-- Node.js 20 ou superior
+- Node.js 22 ou superior
 - Navegador atualizado (Chrome, Edge ou Firefox)
 
 ## Como executar
 1. Extraia o ZIP.
 2. Abra a pasta `private-cinema` no VS Code.
 3. Abra o terminal nessa pasta.
-4. Execute:
+4. (Opcional, para multiplayer) Copie `.env.example` para `.env` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` com os dados do seu projeto Supabase. O modo solo não precisa dessas variáveis.
+5. Execute:
 
 ```bash
 npm install
 npm run dev
 ```
 
-5. Abra o endereço local exibido pelo Vite (normalmente `http://localhost:5173`).
+6. Abra o endereço local exibido pelo Vite (normalmente `http://localhost:5173`).
 
 ## Controles
 - Clique em **ENTRAR NO CINEMA**.
@@ -42,3 +43,8 @@ No início de `src/main.js`, ajuste:
 - `SCREEN_NAME`: nome do objeto que recebe o vídeo (no arquivo atual: `Screen`).
 
 O posicionamento inicial foi estimado pela geometria do GLB e pode precisar de pequenos ajustes depois de testar visualmente no navegador.
+
+
+## Configuração do multiplayer
+
+O multiplayer depende de funções RPC, tabelas, políticas RLS, Realtime e autenticação anônima configuradas no Supabase. Essas definições precisam existir no projeto Supabase; este repositório não contém o SQL de instalação. Não exponha uma chave `service_role` no frontend. Use somente a chave pública `anon` e configure políticas RLS e validações nas funções do banco.

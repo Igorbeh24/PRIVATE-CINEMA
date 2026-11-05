@@ -205,13 +205,12 @@ let originalScreenVisible = true;
 
 let videoElement = null;
 let videoTexture = null;
+let videoMaterial = null;
 let embeddedObject = null;
 
 let youtubePlayer = null;
 let youtubeReady = false;
 let youtubeCurrentId = null;
-let youtubeSyncTimer = null;
-
 let localObjectUrl = null;
 
 let yaw = Math.PI / 2;
@@ -234,13 +233,13 @@ let roomMembers = [];
 let isApplyingRemotePlayback = false;
 let lastPlaybackWrite = 0;
 let lastLoadedRemoteMedia = null;
-let pendingSharedMediaUrl = null;
 let isSeeking = false;
 
 let localStream = null;
 
 const peers = new Map();
 const remoteAudio = new Map();
+const pendingIceCandidates = new Map();
 
 let heartbeatTimer = null;
 
@@ -302,9 +301,9 @@ function disposeCurrentVideo() {
         videoTexture = null;
     }
 
-    if (youtubeSyncTimer) {
-        clearInterval(youtubeSyncTimer);
-        youtubeSyncTimer = null;
+    if (videoMaterial) {
+        videoMaterial.dispose();
+        videoMaterial = null;
     }
 
     if (youtubePlayer) {
@@ -383,8 +382,6 @@ function loadYouTubeAPI() {
 async function makeYouTubeScreen(videoId) {
     disposeCurrentVideo();
 
-    renderer.domElement.style.visibility = 'hidden';
-
     const container = document.createElement('div');
 
     container.id = 'privateCinemaYouTubePlayer';
@@ -417,7 +414,6 @@ async function makeYouTubeScreen(videoId) {
         const YT = await loadYouTubeAPI();
 
         if (youtubeCurrentId !== videoId || !container.isConnected) {
-            renderer.domElement.style.visibility = 'visible';
             return;
         }
 
@@ -442,28 +438,54 @@ async function makeYouTubeScreen(videoId) {
                     youtubeReady = true;
                     updatePlaybackUI();
 
-                    event.target.playVideo();
+                    if (currentRoom && !isHost()) {
+                        void applyRemoteRoomPlayback(currentRoom);
+                    } else {
+                        event.target.playVideo();
+                    }
                 },
 
-                onStateChange: () => {
+                onStateChange: event => {
                     updatePlaybackUI();
+
+                    if (
+                        !currentRoom ||
+                        !isHost() ||
+                        isApplyingRemotePlayback
+                    ) {
+                        return;
+                    }
+
+                    const playerState = window.YT?.PlayerState;
+
+                    if (event.data === playerState?.PLAYING) {
+                        void publishPlayback('playing');
+                    } else if (
+                        event.data === playerState?.PAUSED ||
+                        event.data === playerState?.ENDED
+                    ) {
+                        void publishPlayback('paused');
+                    }
                 },
 
                 onError: event => {
-                    renderer.domElement.style.visibility = 'visible';
+                    if (youtubeCurrentId !== videoId) return;
 
                     console.error(
                         'YouTube Player error:',
                         event.data
                     );
 
+                    disposeCurrentVideo();
                     showToast(`Erro do YouTube (${event.data}).`);
                 }
             }
         });
 
     } catch (error) {
-        renderer.domElement.style.visibility = 'visible';
+        if (youtubeCurrentId === videoId) {
+            disposeCurrentVideo();
+        }
 
         showToast(
             error.message || 'Erro ao iniciar o YouTube.'
@@ -527,8 +549,10 @@ function parseVideoLink(raw) {
 
   if (
     host === 'youtu.be' ||
-    host.endsWith('youtube.com') ||
-    host.endsWith('youtube-nocookie.com')
+    host === 'youtube.com' ||
+    host.endsWith('.youtube.com') ||
+    host === 'youtube-nocookie.com' ||
+    host.endsWith('.youtube-nocookie.com')
   ) {
     let id = '';
 
@@ -585,8 +609,8 @@ function playDirectVideo(src, title = 'VÍDEO EXTERNO', remote = false) {
 
   const video = document.createElement('video');
 
-  video.src = src;
   video.crossOrigin = 'anonymous';
+  video.src = src;
   video.loop = false;
   video.muted = false;
   video.playsInline = true;
@@ -605,11 +629,13 @@ function playDirectVideo(src, title = 'VÍDEO EXTERNO', remote = false) {
   videoTexture.generateMipmaps = false;
 
   if (screenMesh) {
-    screenMesh.material = new THREE.MeshBasicMaterial({
+    videoMaterial = new THREE.MeshBasicMaterial({
       map: videoTexture,
       side: THREE.DoubleSide,
       toneMapped: false
     });
+
+    screenMesh.material = videoMaterial;
   }
 
   video.addEventListener('play', updatePlaybackUI);
@@ -645,17 +671,17 @@ async function loadVideoLink(raw, fromRemote = false) {
       throw new Error('Somente o anfitrião pode escolher o vídeo.');
     }
 
-    if (parsed.provider === 'file') {
-      pendingSharedMediaUrl =
-        currentRoom && !fromRemote ? parsed.src : null;
+    if (localObjectUrl) {
+      URL.revokeObjectURL(localObjectUrl);
+      localObjectUrl = null;
+    }
 
+    if (parsed.provider === 'file') {
       playDirectVideo(parsed.src, raw, fromRemote);
 
       if (currentRoom && !fromRemote) {
         await publishPlayback('playing', parsed.src, true);
       }
-
-      pendingSharedMediaUrl = null;
 
     } else {
       disposeCurrentVideo();
@@ -679,7 +705,6 @@ async function loadVideoLink(raw, fromRemote = false) {
     message.textContent = 'Vídeo carregado.';
 
   } catch (error) {
-    pendingSharedMediaUrl = null;
     message.textContent = error.message;
     showToast(error.message);
   }
@@ -768,6 +793,12 @@ function renderMembers() {
 // ======================================================
 
 async function ensureAuth() {
+  if (!supabase) {
+    throw new Error(
+      'Multiplayer indisponível: configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.'
+    );
+  }
+
   let { data: { session }, error } =
     await supabase.auth.getSession();
 
@@ -790,10 +821,11 @@ async function ensureAuth() {
 
 async function createRoom() {
   try {
-    await ensureAuth();
+    if (currentRoom) {
+      throw new Error('Saia da sala atual antes de criar outra.');
+    }
 
-    const name =
-      $('#displayName').value.trim() || 'Anfitrião';
+    await ensureAuth();
 
     const { data, error } = await supabase.rpc('create_room', {
       p_name: $('#roomName').value.trim() || 'Cinema Privado',
@@ -817,6 +849,10 @@ async function createRoom() {
 
 async function joinRoom() {
   try {
+    if (currentRoom) {
+      throw new Error('Saia da sala atual antes de entrar em outra.');
+    }
+
     await ensureAuth();
 
     const code =
@@ -872,8 +908,18 @@ async function enterRoom(room, member) {
 
   await subscribeRoom();
 
-  heartbeatTimer = setInterval(() => {
-    supabase.rpc('room_heartbeat');
+  clearInterval(heartbeatTimer);
+
+  heartbeatTimer = setInterval(async () => {
+    try {
+      const { error } = await supabase.rpc('room_heartbeat');
+
+      if (error) {
+        console.warn('Falha no heartbeat da sala:', error);
+      }
+    } catch (error) {
+      console.warn('Falha de rede no heartbeat da sala:', error);
+    }
   }, 25000);
 
   $('#roomHud').classList.add('visible');
@@ -1317,6 +1363,8 @@ function closePeer(id) {
     peers.delete(id);
   }
 
+  pendingIceCandidates.delete(id);
+
   const audio = remoteAudio.get(id);
 
   if (audio) {
@@ -1449,6 +1497,13 @@ async function handleSignal(payload) {
     if (payload.description) {
       await pc.setRemoteDescription(payload.description);
 
+      const queuedCandidates = pendingIceCandidates.get(payload.from) || [];
+      pendingIceCandidates.delete(payload.from);
+
+      for (const candidate of queuedCandidates) {
+        await pc.addIceCandidate(candidate);
+      }
+
       if (payload.description.type === 'offer') {
         const answer = await pc.createAnswer();
 
@@ -1460,7 +1515,13 @@ async function handleSignal(payload) {
       }
 
     } else if (payload.candidate) {
-      await pc.addIceCandidate(payload.candidate);
+      if (pc.remoteDescription) {
+        await pc.addIceCandidate(payload.candidate);
+      } else {
+        const queued = pendingIceCandidates.get(payload.from) || [];
+        queued.push(payload.candidate);
+        pendingIceCandidates.set(payload.from, queued);
+      }
     }
 
   } catch (e) {
@@ -1519,6 +1580,10 @@ async function startVoice() {
     showToast('Microfone conectado.');
 
   } catch (e) {
+    if (localStream) {
+      stopVoice();
+    }
+
     showToast(
       `Não foi possível acessar o microfone: ${e.message}`
     );
@@ -1582,6 +1647,16 @@ originalScreenVisible = obj.visible;
     });
 
     scene.add(model);
+
+    // O vídeo pode ser escolhido antes de o GLB terminar de carregar.
+    // Reaplica o estado atual da tela assim que a malha for encontrada.
+    if (screenMesh) {
+      if (embeddedObject) {
+        screenMesh.visible = false;
+      } else if (videoMaterial) {
+        screenMesh.material = videoMaterial;
+      }
+    }
 
     updateSeatMarkers();
 
@@ -1673,17 +1748,17 @@ document.addEventListener('mousemove', event => {
 // CONTROLES EXISTENTES
 // ======================================================
 
-a$('#enterBtn')?.addEventListener('click', enterCinema);
+$('#enterBtn')?.addEventListener('click', enterCinema);
 
-a$('#movieBtn')?.addEventListener('click', () => {
+$('#movieBtn')?.addEventListener('click', () => {
   panel.classList.toggle('open');
 });
 
-a$('#closePanel')?.addEventListener('click', () => {
+$('#closePanel')?.addEventListener('click', () => {
   panel.classList.remove('open');
 });
 
-a$('#videoForm')?.addEventListener('submit', event => {
+$('#videoForm')?.addEventListener('submit', event => {
   event.preventDefault();
 
   const value = $('#videoUrl').value;
@@ -1695,11 +1770,11 @@ a$('#videoForm')?.addEventListener('submit', event => {
   }
 });
 
-a$('#videoFile')?.addEventListener('change', event => {
+$('#videoFile')?.addEventListener('change', event => {
   loadLocalFile(event.target.files?.[0]);
 });
 
-a$('#fullscreenBtn')?.addEventListener('click', async () => {
+$('#fullscreenBtn')?.addEventListener('click', async () => {
   try {
     if (!document.fullscreenElement) {
       await app.requestFullscreen();
@@ -1715,7 +1790,7 @@ a$('#fullscreenBtn')?.addEventListener('click', async () => {
 // CONTROLES DE PLAY / PAUSE
 // ======================================================
 
-a$('#playPauseBtn')?.addEventListener('click', async () => {
+$('#playPauseBtn')?.addEventListener('click', async () => {
   const hasYT = youtubeReady && youtubePlayer;
 
   if (!videoElement && !hasYT) {
@@ -1772,15 +1847,15 @@ a$('#playPauseBtn')?.addEventListener('click', async () => {
 // BARRA DE TEMPO
 // ======================================================
 
-a$('#seekBar')?.addEventListener('pointerdown', () => {
+$('#seekBar')?.addEventListener('pointerdown', () => {
   isSeeking = true;
 });
 
-a$('#seekBar')?.addEventListener('pointerup', () => {
+$('#seekBar')?.addEventListener('pointerup', () => {
   isSeeking = false;
 });
 
-a$('#seekBar')?.addEventListener('input', event => {
+$('#seekBar')?.addEventListener('input', event => {
   if (
     (!videoElement && !(youtubeReady && youtubePlayer)) ||
     (currentRoom && !isHost())
@@ -1799,7 +1874,7 @@ a$('#seekBar')?.addEventListener('input', event => {
   }
 });
 
-a$('#seekBar')?.addEventListener('change', async () => {
+$('#seekBar')?.addEventListener('change', async () => {
   isSeeking = false;
 
   if (
@@ -1829,23 +1904,23 @@ a$('#seekBar')?.addEventListener('change', async () => {
 // CONTROLES MULTIPLAYER
 // ======================================================
 
-a$('#openRoomBtn')?.addEventListener('click', () => {
+$('#openRoomBtn')?.addEventListener('click', () => {
   $('#roomGate').hidden = false;
   $('#roomGate').classList.add('open');
 });
 
-a$('#closeRoomGate')?.addEventListener('click', () => {
+$('#closeRoomGate')?.addEventListener('click', () => {
   $('#roomGate').classList.remove('open');
   $('#roomGate').hidden = true;
 });
 
-a$('#createRoomBtn')?.addEventListener('click', createRoom);
+$('#createRoomBtn')?.addEventListener('click', createRoom);
 
-a$('#joinRoomBtn')?.addEventListener('click', joinRoom);
+$('#joinRoomBtn')?.addEventListener('click', joinRoom);
 
-a$('#leaveRoomBtn')?.addEventListener('click', leaveRoom);
+$('#leaveRoomBtn')?.addEventListener('click', leaveRoom);
 
-a$('#copyCodeBtn')?.addEventListener('click', async () => {
+$('#copyCodeBtn')?.addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(currentRoom.code);
 
@@ -1856,11 +1931,11 @@ a$('#copyCodeBtn')?.addEventListener('click', async () => {
   }
 });
 
-a$('#micBtn')?.addEventListener('click', () => {
+$('#micBtn')?.addEventListener('click', () => {
   localStream ? stopVoice() : startVoice();
 });
 
-a$('#roomMovieBtn')?.addEventListener('click', () => {
+$('#roomMovieBtn')?.addEventListener('click', () => {
   if (!isHost()) {
     return showToast('Somente o anfitrião pode escolher o vídeo.');
   }
@@ -1936,10 +2011,6 @@ function updatePlaybackUI() {
 // UTILITÁRIOS
 // ======================================================
 
-function a$(selector) {
-  return document.querySelector(selector);
-}
-
 // ======================================================
 // REDIMENSIONAMENTO
 // ======================================================
@@ -1961,7 +2032,6 @@ window.addEventListener('resize', resize);
 
 window.addEventListener('beforeunload', () => {
   clearInterval(heartbeatTimer);
-  clearInterval(youtubeSyncTimer);
 
   stopVoice();
 
