@@ -14,10 +14,14 @@ const CAMERA_START = new THREE.Vector3(6.55, 2.65, 0);
 const LOOK_AT_START = new THREE.Vector3(-4.42, 3.88, 0);
 
 const SCREEN_NAME = 'Screen';
-const SCREEN_CENTER = new THREE.Vector3(-4.415, 3.8777, 0);
-const SCREEN_WIDTH = 12.65;
-const SCREEN_HEIGHT = 7.0;
+const SCREEN_CENTER = new THREE.Vector3(
+    -1.015703,
+    3.677662,
+    0
+);
 
+const SCREEN_WIDTH = 10.37138;
+const SCREEN_HEIGHT = 5.77614;
 // ======================================================
 // CONFIGURAÇÃO DAS CADEIRAS
 // ======================================================
@@ -379,17 +383,39 @@ function loadYouTubeAPI() {
   return window.__privateCinemaYTApiPromise;
 }
 
+
 async function makeYouTubeScreen(videoId) {
     disposeCurrentVideo();
 
-    const container = document.createElement('div');
+    // Elemento externo: permanece controlado pelo CSS3DRenderer.
+    const wrapper = document.createElement('div');
 
-    container.id = 'privateCinemaYouTubePlayer';
+    wrapper.id = 'privateCinemaYouTubeWrapper';
 
-    container.style.cssText =
-        'width:1920px;height:1080px;background:#000;overflow:hidden';
+    wrapper.style.cssText = `
+        width: 1920px;
+        height: 1080px;
+        position: relative;
+        overflow: hidden;
+        background: #000;
+        pointer-events: auto;
+    `;
 
-    embeddedObject = new CSS3DObject(container);
+    // Elemento interno: será substituído pelo iframe do YouTube.
+    const playerTarget = document.createElement('div');
+
+    playerTarget.id = 'privateCinemaYouTubePlayer';
+
+    playerTarget.style.cssText = `
+        width: 100%;
+        height: 100%;
+        background: #000;
+    `;
+
+    wrapper.appendChild(playerTarget);
+
+    // O CSS3DRenderer controla somente o wrapper.
+    embeddedObject = new CSS3DObject(wrapper);
 
     embeddedObject.position.copy(SCREEN_CENTER);
     embeddedObject.position.x += 0.012;
@@ -413,11 +439,14 @@ async function makeYouTubeScreen(videoId) {
     try {
         const YT = await loadYouTubeAPI();
 
-        if (youtubeCurrentId !== videoId || !container.isConnected) {
+        if (
+            youtubeCurrentId !== videoId ||
+            !wrapper.isConnected
+        ) {
             return;
         }
 
-        youtubePlayer = new YT.Player(container, {
+        youtubePlayer = new YT.Player(playerTarget, {
             width: '1920',
             height: '1080',
             videoId,
@@ -477,6 +506,7 @@ async function makeYouTubeScreen(videoId) {
                     );
 
                     disposeCurrentVideo();
+
                     showToast(`Erro do YouTube (${event.data}).`);
                 }
             }
@@ -492,6 +522,7 @@ async function makeYouTubeScreen(videoId) {
         );
     }
 }
+
 
 // ======================================================
 // PLAYER EMBUTIDO - VIMEO
@@ -623,6 +654,21 @@ function playDirectVideo(src, title = 'VÍDEO EXTERNO', remote = false) {
   videoElement = video;
 
   videoTexture = new THREE.VideoTexture(videoTextureSource(video));
+  video.addEventListener('loadeddata', () => {
+  console.log('[DIAGNÓSTICO] Vídeo carregou os primeiros quadros.');
+  console.log('Dimensões:', video.videoWidth, video.videoHeight);
+  console.log('Estado:', video.readyState);
+});
+
+video.addEventListener('playing', () => {
+  console.log('[DIAGNÓSTICO] Vídeo está reproduzindo.');
+  console.log('Pausado:', video.paused);
+  console.log('Tempo:', video.currentTime);
+});
+
+video.addEventListener('error', () => {
+  console.error('[DIAGNÓSTICO] Erro no vídeo:', video.error);
+});
   videoTexture.colorSpace = THREE.SRGBColorSpace;
   videoTexture.minFilter = THREE.LinearFilter;
   videoTexture.magFilter = THREE.LinearFilter;
@@ -1647,6 +1693,16 @@ originalScreenVisible = obj.visible;
     });
 
     scene.add(model);
+    if (screenMesh) {
+    screenMesh.updateWorldMatrix(true, false);
+
+    const box = new THREE.Box3().setFromObject(screenMesh);
+
+    console.log("[TELA - CENTRO REAL]:", box.getCenter(new THREE.Vector3()));
+    console.log("[TELA - DIMENSÕES REAIS]:", box.getSize(new THREE.Vector3()));
+    console.log("[TELA - MÍNIMO]:", box.min);
+    console.log("[TELA - MÁXIMO]:", box.max);
+}
 
     // O vídeo pode ser escolhido antes de o GLB terminar de carregar.
     // Reaplica o estado atual da tela assim que a malha for encontrada.
