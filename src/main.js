@@ -547,10 +547,12 @@ function makeEmbeddedScreen(url) {
 
   embeddedObject = new CSS3DObject(frame);
 
-  embeddedObject.position.copy(SCREEN_CENTER);
-  embeddedObject.position.x += 0.012;
-  embeddedObject.position.Y += 0.10;
-  embeddedObject.rotation.y = -Math.PI / 2;
+embeddedObject.position.copy(SCREEN_CENTER);
+
+embeddedObject.position.x += 0.012; // Posição horizontal
+embeddedObject.position.y += 1.0;  // Altura: sobe a tela
+
+embeddedObject.rotation.y = Math.PI / 2;
 
   embeddedObject.scale.set(
     SCREEN_WIDTH / 1920,
