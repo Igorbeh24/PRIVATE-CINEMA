@@ -422,8 +422,8 @@ async function makeYouTubeScreen(videoId) {
     embeddedObject.rotation.y = Math.PI / 2;
 
     embeddedObject.scale.set(
-    (SCREEN_WIDTH / 1920) * 0.95,
-    (SCREEN_HEIGHT / 1080) * 0.95,
+    (SCREEN_WIDTH / 1920) * 0.98,
+    (SCREEN_HEIGHT / 1080) * 0.98,
     1
 );
 
