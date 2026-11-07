@@ -2037,6 +2037,17 @@ function updatePlaybackUI() {
   const roomMovieButton = $('#roomMovieBtn');
 
   if (!button || !seek || !controls) return;
+    const movieButton = $('#movieBtn');
+const roomMovieButton = $('#roomMovieBtn');
+
+// Visitantes não podem escolher vídeos.
+if (movieButton) {
+  movieButton.hidden = !!currentRoom;
+}
+
+if (roomMovieButton) {
+  roomMovieButton.hidden = !!currentRoom && !isHost();
+}
 
   const hasYT = !!(youtubeReady && youtubePlayer);
   const hasDirectVideo = !!videoElement;
