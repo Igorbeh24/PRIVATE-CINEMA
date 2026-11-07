@@ -199,4 +199,8 @@
     width: 32px;
     height: 32px;
 }
+  #playPauseBtn[hidden],
+#seekBar[hidden] {
+    display: none !important;
+}
 }
