@@ -2072,7 +2072,7 @@ function updatePlaybackUI() {
     playing = !videoElement.paused;
   }
 
-  button.textContent = playing ? 'Ⅱ' : '▶';
+  button.textContent = playing ? '⏸' : '▶';
 
   if (!hasPlayableMedia) {
     seek.min = '0';
