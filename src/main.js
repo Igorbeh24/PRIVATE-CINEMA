@@ -567,6 +567,7 @@ embeddedObject.rotation.y = Math.PI / 2;
   if (screenMesh) {
     screenMesh.visible = false;
 }
+    updatePlaybackUI();
 }
 // ======================================================
 // IDENTIFICAÇÃO DOS LINKS
