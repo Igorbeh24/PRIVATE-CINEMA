@@ -437,7 +437,6 @@ async function makeYouTubeScreen(videoId) {
     }
 
     youtubeCurrentId = videoId;
-    nowPlaying.textContent = 'YOUTUBE NO TELÃO';
 
     try {
         const YT = await loadYouTubeAPI();
@@ -704,7 +703,6 @@ video.addEventListener('error', () => {
       showToast('Clique em reproduzir para iniciar o vídeo.');
     });
 
-  nowPlaying.textContent = title.toUpperCase();
 }
 
 function videoTextureSource(video) {
@@ -742,7 +740,6 @@ async function loadVideoLink(raw, fromRemote = false) {
         await makeYouTubeScreen(parsed.id);
       } else {
         makeEmbeddedScreen(parsed.src);
-        nowPlaying.textContent = 'VIMEO NO TELÃO';
       }
 
       if (currentRoom && !fromRemote) {
@@ -836,8 +833,13 @@ function renderMembers() {
 
   $('#hostControls').hidden = !isHost();
 
-  $('#roomCodeDisplay').textContent =
+const host = isHost();
+
+$('#roomCodeDisplay').textContent =
     currentRoom?.code || '------';
+
+$('#roomCodeDisplay').hidden = !host;
+$('#copyCodeBtn').hidden = !host;
 }
 
 // ======================================================
@@ -2036,8 +2038,10 @@ function updatePlaybackUI() {
 
   const hasMedia = hasYT || hasDirectVideo;
 
-  const canControlSeek =
-    hasMedia && (!currentRoom || isHost());
+  const canControl = !currentRoom || isHost();
+
+button.hidden = !canControl;
+seek.hidden = !canControl;
 
   button.disabled = !hasMedia;
   seek.disabled = !canControlSeek;
@@ -2066,6 +2070,7 @@ button.setAttribute(
 
     return;
   }
+    
 
   const duration = hasYT
     ? Number(youtubePlayer.getDuration() || 0)
