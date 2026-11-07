@@ -248,6 +248,7 @@ const remoteAudio = new Map();
 const pendingIceCandidates = new Map();
 
 let heartbeatTimer = null;
+let isLeavingRoom = false;
 
 // ======================================================
 // NOTIFICAÇÕES
@@ -1071,9 +1072,30 @@ async function subscribeRoom() {
       connectPresentPeers();
     })
 
-    .on('presence', { event: 'leave' }, ({ key }) => {
-      closePeer(key);
+    .on(
+  'broadcast',
+  { event: 'host-left' },
+  () => {
+    if (!isHost()) {
+      void leaveRoom({
+        notifyOthers: false,
+        toastMessage: 'O anfitrião encerrou a sala. Você voltou ao início.'
+      });
+    }
+  }
+)
+
+.on('presence', { event: 'leave' }, ({ key }) => {
+  closePeer(key);
+
+  // Detecta quando o anfitrião desconecta inesperadamente.
+  if (key === currentRoom?.host_id && !isHost()) {
+    void leaveRoom({
+      notifyOthers: false,
+      toastMessage: 'O anfitrião saiu. Você voltou ao início.'
     });
+  }
+});
 
   await roomChannel.subscribe(async status => {
 
@@ -1344,10 +1366,34 @@ async function applyRemoteRoomPlayback(room) {
 // SAIR DA SALA
 // ======================================================
 
-async function leaveRoom() {
+async function leaveRoom({
+  notifyOthers = true,
+  toastMessage = 'Você saiu da sala.'
+} = {}) {
+  if (isLeavingRoom || !currentRoom) return;
+
+  isLeavingRoom = true;
+
+  const wasHost = isHost();
+
   try {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
+
+    // Avisa os participantes antes de encerrar o canal.
+    if (wasHost && notifyOthers && roomChannel) {
+      try {
+        await roomChannel.send({
+          type: 'broadcast',
+          event: 'host-left',
+          payload: {
+            message: 'O anfitrião encerrou a sala.'
+          }
+        });
+      } catch (error) {
+        console.warn('Falha ao avisar os participantes:', error);
+      }
+    }
 
     stopVoice();
 
@@ -1356,38 +1402,59 @@ async function leaveRoom() {
       roomChannel = null;
     }
 
-    await supabase.rpc('leave_room');
+    // Remove o próprio participante da sala.
+    const { error } = await supabase.rpc('leave_room');
 
-  } catch (e) {
-    console.warn('Saída da sala:', e);
+    if (error) {
+      console.warn('Erro ao sair da sala:', error);
+    }
+
+  } catch (error) {
+    console.warn('Saída da sala:', error);
+
+  } finally {
+    currentRoom = null;
+    currentMember = null;
+    roomMembers = [];
+    lastLoadedRemoteMedia = null;
+
+    // Esconde o painel multiplayer.
+    const hud = $('#roomHud');
+    hud.classList.remove('visible', 'collapsed');
+    hud.hidden = true;
+
+    // Retorna à tela de salas.
+    const gate = $('#roomGate');
+    gate.hidden = false;
+    gate.classList.remove('open');
+
+    // Limpa os dados visuais.
+    $('#memberList').innerHTML = '';
+    $('#roomCount').textContent = '0 PARTICIPANTES';
+    $('#roomRole').textContent = '';
+    $('#leaveRoomBtn').disabled = true;
+
+    // Restaura a câmera para a posição inicial.
+    camera.position.copy(CAMERA_START);
+
+    yaw = Math.PI / 2;
+    yawCenter = yaw;
+
+    pitch = Math.atan2(
+      LOOK_AT_START.y - CAMERA_START.y,
+      Math.hypot(
+        LOOK_AT_START.x - CAMERA_START.x,
+        LOOK_AT_START.z - CAMERA_START.z
+      )
+    );
+
+    updateCamera();
+    updatePlaybackUI();
+
+    isLeavingRoom = false;
+
+    showToast(toastMessage);
   }
-
-  currentRoom = null;
-  currentMember = null;
-  roomMembers = [];
-  lastLoadedRemoteMedia = null;
-
-  $('#roomHud').classList.remove('visible');
-  $('#roomHud').hidden = true;
-
-  $('#roomGate').hidden = false;
-
-camera.position.copy(CAMERA_START);
-
-yaw = Math.PI / 2;
-yawCenter = yaw;
-
-pitch = Math.atan2(
-    LOOK_AT_START.y - CAMERA_START.y,
-    Math.hypot(
-      LOOK_AT_START.x - CAMERA_START.x,
-      LOOK_AT_START.z - CAMERA_START.z
-    )
-  );
-
-  updateCamera();
-  updatePlaybackUI();
-  showToast('Você saiu da sala.');
 }
 
 // ======================================================
