@@ -707,6 +707,7 @@ video.addEventListener('error', () => {
 
 function videoTextureSource(video) {
   return video;
+    updatePlaybackUI();
 }
 
 // ======================================================
