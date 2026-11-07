@@ -1368,11 +1368,12 @@ async function leaveRoom() {
 
   $('#roomGate').hidden = false;
 
-  camera.position.copy(CAMERA_START);
+camera.position.copy(CAMERA_START);
 
-  yaw = Math.PI / 2;
+yaw = Math.PI / 2;
+yawCenter = yaw;
 
-  pitch = Math.atan2(
+pitch = Math.atan2(
     LOOK_AT_START.y - CAMERA_START.y,
     Math.hypot(
       LOOK_AT_START.x - CAMERA_START.x,
