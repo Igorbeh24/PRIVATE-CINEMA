@@ -1994,8 +1994,10 @@ $('#toggleRoomHud')?.addEventListener('click', () => {
 
   const collapsed = hud.classList.toggle('collapsed');
 
-  button.textContent = collapsed ? '‹' : '›';
+  button.textContent = collapsed ? '<' : '>';
+
   button.setAttribute('aria-expanded', String(!collapsed));
+
   button.setAttribute(
     'aria-label',
     collapsed ? 'Expandir painel da sala' : 'Recolher painel da sala'
