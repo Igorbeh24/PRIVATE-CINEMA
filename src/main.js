@@ -1792,13 +1792,14 @@ document.addEventListener('pointerlockchange', () => {
 document.addEventListener('mousemove', event => {
   if (document.pointerLockElement !== renderer.domElement) return;
 
-  yaw -= event.movementX * 0.0022;
+  yaw -= event.movementX * 0.0018;
   pitch -= event.movementY * 0.0022;
 
+  // Limite de 95 graus para cada lado
   yaw = THREE.MathUtils.clamp(
     yaw,
-    -Math.PI * 2,
-    Math.PI * 2
+    yawCenter - CAMERA_LIMIT,
+    yawCenter + CAMERA_LIMIT
   );
 
   pitch = THREE.MathUtils.clamp(pitch, -1, 1);
