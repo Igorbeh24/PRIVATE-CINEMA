@@ -2038,6 +2038,16 @@ function updatePlaybackUI() {
 
   const hasMedia = hasYT || hasDirectVideo;
 
+    const canControlSeek =
+    hasMedia && (!currentRoom || isHost());
+
+const canControl = !currentRoom || isHost();
+
+button.hidden = !canControl;
+seek.hidden = !canControl;
+button.disabled = !hasMedia;
+seek.disabled = !canControlSeek;
+
   const canControl = !currentRoom || isHost();
 
 button.hidden = !canControl;
