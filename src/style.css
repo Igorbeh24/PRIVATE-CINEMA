@@ -205,3 +205,35 @@
 #seekBar[hidden] {
     display: none !important;
 }
+/* Animação do painel da sala */
+.room-hud {
+  transition: opacity .25s ease, transform .3s ease;
+}
+
+/* Painel recolhido para a direita */
+.room-hud.collapsed {
+  transform: translateX(calc(100% - 40px));
+}
+
+/* Mantém a seta acessível */
+.room-hud.collapsed .room-hud-toggle {
+  position: absolute;
+  left: -40px;
+  top: 12px;
+  transform: none;
+}
+
+/* Esconde os elementos desativados */
+#movieBtn[hidden],
+#roomMovieBtn[hidden],
+.playback-controls[hidden],
+#playPauseBtn[hidden],
+#seekBar[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 650px) {
+  .room-hud.collapsed {
+    width: min(270px, calc(100vw - 20px));
+  }
+}
