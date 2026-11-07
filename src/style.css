@@ -81,31 +81,50 @@
   border-color: #c6a77b;
 }
 
-/* Conteúdo do painel */
-.room-hud-content {
-  overflow: hidden;
-  max-height: 520px;
-  opacity: 1;
-  transform: translateX(0);
-  transition:
-    transform .4s ease,
-    opacity .3s ease,
-    max-height .4s ease,
-    margin .4s ease;
+/* Painel completo */
+.room-hud {
+  transition: transform .4s ease, opacity .3s ease;
 }
 
-/* Recolhimento: conteúdo desliza para fora */
-.room-hud.collapsed .room-hud-content {
-  transform: translateX(110%);
+/* Recolhimento do painel inteiro */
+.room-hud.collapsed {
+  transform: translateX(calc(100% - 42px + 4vw));
+}
+
+/* Esconde todo o conteúdo */
+.room-hud.collapsed .room-hud-content,
+.room-hud.collapsed .room-hud-head > *:not(.room-hud-buttons) {
   opacity: 0;
-  max-height: 0;
-  margin-top: 0;
+  visibility: hidden;
   pointer-events: none;
 }
 
-/* Botão não se movimenta nem gira */
+/* Esconde os outros botões */
+.room-hud.collapsed .room-hud-buttons > *:not(.room-hud-toggle) {
+  display: none;
+}
+
+/* Seta permanece acessível */
 .room-hud.collapsed .room-hud-toggle {
-  transform: none;
+  position: absolute;
+  left: 0;
+  top: 12px;
+  width: 32px;
+  height: 36px;
+  z-index: 20;
+  transform: none !important;
+  background: #151618;
+}
+
+/* Pequeno traço ao lado da seta */
+.room-hud.collapsed::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: rgba(198, 167, 123, .65);
 }
 
 /* Barra inferior */
@@ -198,7 +217,11 @@
 
   .room-hud-toggle {
     width: 32px;
-    height: 32px;
+    height: 36px;
     font-size: 24px;
+  }
+
+  .room-hud.collapsed {
+    transform: translateX(calc(100% - 42px + 10px));
   }
 }
