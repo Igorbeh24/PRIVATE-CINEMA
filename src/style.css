@@ -198,42 +198,26 @@
     width: 32px;
     height: 32px;
 }
-}
-/* Esconder controles de reprodução corretamente */
-.playback-controls[hidden],
-#playPauseBtn[hidden],
-#seekBar[hidden] {
-    display: none !important;
-}
-/* Animação do painel da sala */
-.room-hud {
-  transition: opacity .25s ease, transform .3s ease;
+/* Animação do conteúdo */
+.room-hud-content {
+  transition:
+    transform 0.4s ease,
+    opacity 0.3s ease,
+    visibility 0.4s ease;
 }
 
-/* Painel recolhido para a direita */
-.room-hud.collapsed {
-  transform: translateX(calc(100% - 40px));
+/* Conteúdo desliza para fora da tela */
+.room-hud.collapsed .room-hud-content {
+  transform: translateX(120%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
-/* Mantém a seta acessível */
-.room-hud.collapsed .room-hud-toggle {
-  position: absolute;
-  left: -40px;
-  top: 12px;
-  transform: none;
+/* Botão permanece no mesmo lugar */
+.room-hud-toggle {
+  position: relative;
+  z-index: 10;
+  transition: none;
 }
-
-/* Esconde os elementos desativados */
-#movieBtn[hidden],
-#roomMovieBtn[hidden],
-.playback-controls[hidden],
-#playPauseBtn[hidden],
-#seekBar[hidden] {
-  display: none !important;
-}
-
-@media (max-width: 650px) {
-  .room-hud.collapsed {
-    width: min(270px, calc(100vw - 20px));
-  }
 }
