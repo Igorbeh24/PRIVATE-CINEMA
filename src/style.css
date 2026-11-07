@@ -184,4 +184,19 @@
   #fullscreenBtn {
     padding: 5px 7px;
   }
+  .room-hud.collapsed .room-hud-content {
+    display: none;
+}
+
+.room-hud.collapsed {
+    width: auto;
+    padding: 10px;
+}
+
+.room-hud-toggle {
+    cursor: pointer;
+    font-size: 24px;
+    width: 32px;
+    height: 32px;
+}
 }
