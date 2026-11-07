@@ -147,14 +147,6 @@
   justify-self: end;
   margin-right: 0;
 }
-
-.playback-controls[hidden],
-#playPauseBtn[hidden],
-#seekBar[hidden] {
-    display: none !important;
-}
-  
-
 @media (max-width: 650px) {
   .room-option {
     padding: 17px;
