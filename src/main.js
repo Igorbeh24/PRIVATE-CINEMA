@@ -2037,16 +2037,15 @@ function updatePlaybackUI() {
   const hasDirectVideo = !!videoElement;
   const hasMedia = hasYT || hasDirectVideo;
 
-  const canControlSeek =
-    hasMedia && (!currentRoom || isHost());
+  // Controles aparecem apenas quando existe mídia
+// e o usuário é o anfitrião (ou está fora de uma sala).
+const canControl = hasMedia && (!currentRoom || isHost());
 
-  const canControl = !currentRoom || isHost();
+button.hidden = !canControl;
+seek.hidden = !canControl;
 
-  button.hidden = !canControl;
-  seek.hidden = !canControl;
-
-  button.disabled = !hasMedia;
-  seek.disabled = !canControlSeek;
+button.disabled = !canControl;
+seek.disabled = !canControl;
 
   let playing = false;
 
