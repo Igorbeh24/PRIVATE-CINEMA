@@ -198,10 +198,11 @@
     width: 32px;
     height: 32px;
 }
+}
 /* Esconder controles de reprodução corretamente */
 .playback-controls[hidden],
 #playPauseBtn[hidden],
 #seekBar[hidden] {
     display: none !important;
 }
-}
+
