@@ -1984,6 +1984,20 @@ $('#joinRoomBtn')?.addEventListener('click', joinRoom);
 
 $('#leaveRoomBtn')?.addEventListener('click', leaveRoom);
 
+$('#toggleRoomHud')?.addEventListener('click', () => {
+  const hud = $('#roomHud');
+  const button = $('#toggleRoomHud');
+
+  const collapsed = hud.classList.toggle('collapsed');
+
+  button.textContent = collapsed ? '‹' : '›';
+  button.setAttribute('aria-expanded', String(!collapsed));
+  button.setAttribute(
+    'aria-label',
+    collapsed ? 'Expandir painel da sala' : 'Recolher painel da sala'
+  );
+});
+
 $('#copyCodeBtn')?.addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(currentRoom.code);
@@ -2039,9 +2053,11 @@ function updatePlaybackUI() {
     playing = !videoElement.paused;
   }
 
-  button.textContent = playing
-    ? 'Ⅱ PAUSAR'
-    : '▶ REPRODUZIR';
+  button.textContent = playing ? 'Ⅱ' : '▶';
+button.setAttribute(
+  'aria-label',
+  playing ? 'Pausar' : 'Reproduzir'
+);
 
   if (!hasMedia) {
     seek.min = '0';
