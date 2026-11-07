@@ -1386,7 +1386,7 @@ pitch = Math.atan2(
   );
 
   updateCamera();
-
+  updatePlaybackUI();
   showToast('Você saiu da sala.');
 }
 
@@ -2126,5 +2126,5 @@ function animate() {
   renderer.render(scene, camera);
   cssRenderer.render(scene, camera);
 }
-
+updatePlaybackUI();
 animate();
