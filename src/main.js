@@ -2036,35 +2036,25 @@ function updatePlaybackUI() {
   const movieButton = $('#movieBtn');
   const roomMovieButton = $('#roomMovieBtn');
 
-  if (!button || !seek || !controls) return;
-    const movieButton = $('#movieBtn');
-const roomMovieButton = $('#roomMovieBtn');
-
-// Visitantes não podem escolher vídeos.
-if (movieButton) {
-  movieButton.hidden = !!currentRoom;
-}
-
-if (roomMovieButton) {
-  roomMovieButton.hidden = !!currentRoom && !isHost();
-}
-
-  const hasYT = !!(youtubeReady && youtubePlayer);
-  const hasDirectVideo = !!videoElement;
-  const hasPlayableMedia = hasYT || hasDirectVideo;
-  const hasAnyMedia = hasPlayableMedia || !!embeddedObject;
   const host = isHost();
 
-  // Modo individual: botão aparece somente após carregar um vídeo.
-  // Multiplayer: somente o anfitrião pode escolher vídeos.
+  // Botão individual
   if (movieButton) {
-    movieButton.hidden = currentRoom ? true : !hasAnyMedia;
+    movieButton.hidden = !!currentRoom;
   }
 
+  // Na sala, somente visitantes não podem escolher vídeos.
   if (roomMovieButton) {
     roomMovieButton.hidden = !currentRoom || !host;
   }
 
+  if (!button || !seek || !controls) return;
+
+  const hasYT = !!(youtubeReady && youtubePlayer);
+  const hasDirectVideo = !!videoElement;
+  const hasPlayableMedia = hasYT || hasDirectVideo;
+
+  // Controles de reprodução somente para o anfitrião.
   const canControl = hasPlayableMedia && (!currentRoom || host);
 
   controls.hidden = !canControl;
@@ -2076,7 +2066,7 @@ if (roomMovieButton) {
 
   let playing = false;
 
-  if (hasYT && youtubePlayer) {
+  if (hasYT) {
     playing = youtubePlayer.getPlayerState() === YT.PlayerState.PLAYING;
   } else if (hasDirectVideo) {
     playing = !videoElement.paused;
@@ -2091,8 +2081,22 @@ if (roomMovieButton) {
     return;
   }
 
-  // Mantenha aqui o restante da lógica original
-  // de atualização da duração e posição do vídeo.
+  const duration = hasYT
+    ? youtubePlayer.getDuration()
+    : videoElement.duration;
+
+  const currentTime = hasYT
+    ? youtubePlayer.getCurrentTime()
+    : videoElement.currentTime;
+
+  if (Number.isFinite(duration) && duration > 0) {
+    seek.min = '0';
+    seek.max = String(duration);
+
+    if (!isSeeking) {
+      seek.value = String(currentTime);
+    }
+  }
 }
 // ======================================================
 // UTILITÁRIOS
