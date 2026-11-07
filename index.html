@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -26,14 +25,24 @@
       </div>
     </header>
 
-    <section class="welcome" id="welcome">
-      <div class="welcome-kicker">SUA SALA. SEU FILME.</div>
-      <h1>O cinema<br><em>começa aqui.</em></h1>
-      <p>Entre na sala, acomode-se e escolha o que assistir.</p>
-      <button class="primary-btn" id="enterBtn">
-        ENTRAR NO CINEMA <span>↗</span>
-      </button>
-      <div class="welcome-note">EXPERIÊNCIA 3D INTERATIVA</div>
+    <section class="welcome" id="welcome" aria-label="Menu principal">
+      <div class="home-menu">
+        <div class="home-brand">PRIVATE <span>CINEMA</span></div>
+        <div class="home-divider"></div>
+        <h1>PRIVATE<br><em>CINEMA</em></h1>
+        <p class="home-caption">SUA SALA. SEU FILME. SUA EXPERIÊNCIA.</p>
+
+        <button class="home-play-btn" id="homePlayBtn" type="button">
+          <span>PLAY</span><span class="home-arrow">↗</span>
+        </button>
+
+        <div class="home-multiplayer-label">MULTIPLAYER</div>
+        <div class="home-multiplayer-actions">
+          <button class="home-secondary-btn" id="homeCreateBtn" type="button">CRIAR</button>
+          <button class="home-secondary-btn" id="homeJoinBtn" type="button">ENTRAR</button>
+        </div>
+        <div class="home-footer">AN IMMERSIVE PRIVATE THEATRE</div>
+      </div>
     </section>
 
     <div class="loading" id="loading">
@@ -59,37 +68,17 @@
       <form id="videoForm">
         <label for="videoUrl">LINK DO VÍDEO</label>
         <div class="url-row">
-          <input
-            id="videoUrl"
-            type="url"
-            placeholder="Cole um link público MP4, WebM ou vídeo..."
-            autocomplete="off"
-          />
+          <input id="videoUrl" type="url" placeholder="Cole um link público MP4, WebM ou vídeo..." autocomplete="off" />
           <button type="submit" class="load-btn">CARREGAR</button>
         </div>
-
-        <div class="or-line">
-          <span>OU ESCOLHA UM ARQUIVO DO COMPUTADOR</span>
-        </div>
-
-        <label class="file-btn" for="videoFile">
-          <span>＋</span> Selecionar vídeo MP4 / WebM
-        </label>
-        <input
-          id="videoFile"
-          type="file"
-          accept="video/mp4,video/webm,video/ogg"
-          hidden
-        />
-
-        <p class="form-message" id="formMessage">
-          Em salas multiplayer, use um link público direto MP4/WebM para
-          sincronizar todos os participantes. Arquivos locais são privados.
-        </p>
+        <div class="or-line"><span>OU ESCOLHA UM ARQUIVO DO COMPUTADOR</span></div>
+        <label class="file-btn" for="videoFile"><span>＋</span> Selecionar vídeo MP4 / WebM</label>
+        <input id="videoFile" type="file" accept="video/mp4,video/webm,video/ogg" hidden />
+        <p class="form-message" id="formMessage">Em salas multiplayer, use um link público direto MP4/WebM para sincronizar todos os participantes. Arquivos locais são privados.</p>
       </form>
     </section>
 
-    <section class="room-gate" id="roomGate" hidden>
+    <section class="room-gate" id="roomGate" hidden data-mode="all">
       <div class="room-card">
         <div class="panel-heading">
           <div>
@@ -100,171 +89,74 @@
         </div>
 
         <label for="displayName">SEU NOME</label>
-        <input
-          id="displayName"
-          class="room-input"
-          maxlength="24"
-          placeholder="Como devemos chamar você?"
-          required
-        />
+        <input id="displayName" class="room-input" maxlength="24" placeholder="Como devemos chamar você?" required />
 
         <div class="room-columns">
           <div class="room-option">
             <span class="panel-eyebrow">NOVA EXPERIÊNCIA</span>
             <h3>Criar sala</h3>
-
             <label for="roomName">NOME DA SALA</label>
-            <input
-              id="roomName"
-              class="room-input"
-              maxlength="40"
-              placeholder="Nome da sua sala"
-              required
-            />
-
+            <input id="roomName" class="room-input" maxlength="40" placeholder="Nome da sua sala" required />
             <label for="maxSeats">CAPACIDADE</label>
             <select id="maxSeats" class="room-input" required>
               <option value="" disabled selected>Selecione a capacidade</option>
-              <option value="4">4 pessoas</option>
-              <option value="8">8 pessoas</option>
-              <option value="12">12 pessoas</option>
+              <option value="4">4 pessoas</option><option value="8">8 pessoas</option><option value="12">12 pessoas</option>
             </select>
-
-            <button class="load-btn wide" id="createRoomBtn" type="button">
-              CRIAR SALA
-            </button>
+            <button class="load-btn wide" id="createRoomBtn" type="button">CRIAR SALA</button>
           </div>
 
           <div class="room-option">
             <span class="panel-eyebrow">JÁ TEM UM CONVITE?</span>
             <h3>Entrar na sala</h3>
-
             <label for="joinCode">CÓDIGO DA SALA</label>
-            <input
-              id="joinCode"
-              class="room-input code-input"
-              maxlength="6"
-              placeholder="ABC123"
-              autocomplete="off"
-              required
-            />
-
+            <input id="joinCode" class="room-input code-input" maxlength="6" placeholder="ABC123" autocomplete="off" required />
             <label for="seatChoice">ASSENTO</label>
             <select id="seatChoice" class="room-input" required>
               <option value="" disabled selected>Selecione um assento</option>
-              <option value="2">Assento 2</option>
-              <option value="3">Assento 3</option>
-              <option value="4">Assento 4</option>
-              <option value="5">Assento 5</option>
-              <option value="6">Assento 6</option>
-              <option value="7">Assento 7</option>
-              <option value="8">Assento 8</option>
-              <option value="9">Assento 9</option>
-              <option value="10">Assento 10</option>
-              <option value="11">Assento 11</option>
-              <option value="12">Assento 12</option>
+              <option value="2">Assento 2</option><option value="3">Assento 3</option><option value="4">Assento 4</option>
+              <option value="5">Assento 5</option><option value="6">Assento 6</option><option value="7">Assento 7</option>
+              <option value="8">Assento 8</option><option value="9">Assento 9</option><option value="10">Assento 10</option>
+              <option value="11">Assento 11</option><option value="12">Assento 12</option>
             </select>
-
-            <button class="load-btn wide" id="joinRoomBtn" type="button">
-              ENTRAR NA SALA
-            </button>
+            <button class="load-btn wide" id="joinRoomBtn" type="button">ENTRAR NA SALA</button>
           </div>
         </div>
-
-        <p class="form-message">
-          O anfitrião fica no assento 1. Cada participante ocupa um assento exclusivo.
-        </p>
+        <p class="form-message">O anfitrião fica no assento 1. Cada participante ocupa um assento exclusivo.</p>
       </div>
     </section>
 
     <aside class="room-hud" id="roomHud" hidden>
       <div class="room-hud-head">
-        <div>
-          <span class="panel-eyebrow">SALA MULTIPLAYER</span>
-          <div class="room-code" id="roomCodeDisplay">------</div>
-        </div>
-
+        <div><span class="panel-eyebrow">SALA MULTIPLAYER</span><div class="room-code" id="roomCodeDisplay">------</div></div>
         <div class="room-hud-buttons">
           <button id="copyCodeBtn" class="copy-btn">COPIAR</button>
-          <button
-            id="toggleRoomHud"
-            class="room-hud-toggle"
-            type="button"
-            aria-label="Recolher painel da sala"
-            aria-expanded="true"
-          >›</button>
+          <button id="toggleRoomHud" class="room-hud-toggle" type="button" aria-label="Recolher painel da sala" aria-expanded="true">›</button>
         </div>
       </div>
-
       <div class="room-hud-content" id="roomHudContent">
-        <div class="room-meta">
-          <span id="roomRole">CONVIDADO</span>
-          <span id="roomStatus">CONECTANDO…</span>
-        </div>
-
-        <div class="member-title">
-          <b>PARTICIPANTES</b>
-          <small id="roomCount">0/0</small>
-        </div>
-
+        <div class="room-meta"><span id="roomRole">CONVIDADO</span><span id="roomStatus">CONECTANDO…</span></div>
+        <div class="member-title"><b>PARTICIPANTES</b><small id="roomCount">0/0</small></div>
         <ul id="memberList" class="member-list"></ul>
-
-        <div id="hostControls" class="host-controls" hidden>
-          <button id="roomMovieBtn" class="load-btn wide">
-            ESCOLHER VÍDEO
-          </button>
-        </div>
-
+        <div id="hostControls" class="host-controls" hidden><button id="roomMovieBtn" class="load-btn wide">ESCOLHER VÍDEO</button></div>
         <div class="room-actions">
           <button id="micBtn" class="room-action">ATIVAR MICROFONE</button>
           <button id="leaveRoomBtn" class="room-action danger">SAIR DA SALA</button>
         </div>
-
-        <p class="voice-note">
-          A voz usa conexão WebRTC. Algumas redes exigem servidor TURN
-          para conexão entre participantes.
-        </p>
+        <p class="voice-note">A voz usa conexão WebRTC. Algumas redes exigem servidor TURN para conexão entre participantes.</p>
       </div>
     </aside>
 
     <div class="bottom-controls" id="bottomControls">
-      <button class="control-btn" id="movieBtn">
-        <span>▶</span> ESCOLHER VÍDEO
-      </button>
-
+      <button class="control-btn" id="movieBtn"><span>▶</span> ESCOLHER VÍDEO</button>
       <div class="playback-controls">
-        <button
-          class="control-btn playback-btn"
-          id="playPauseBtn"
-          disabled
-          aria-label="Reproduzir ou pausar"
-        >▶</button>
-
-        <input
-          id="seekBar"
-          type="range"
-          min="0"
-          max="100"
-          value="0"
-          step="0.1"
-          disabled
-          aria-label="Posição do vídeo"
-        />
+        <button class="control-btn playback-btn" id="playPauseBtn" disabled aria-label="Reproduzir ou pausar">▶</button>
+        <input id="seekBar" type="range" min="0" max="100" value="0" step="0.1" disabled aria-label="Posição do vídeo" />
       </div>
-
       <div class="now-playing" id="nowPlaying"></div>
-
-      <button
-        class="control-btn icon-btn"
-        id="fullscreenBtn"
-        title="Tela cheia"
-        aria-label="Tela cheia"
-      >⛶</button>
+      <button class="control-btn icon-btn" id="fullscreenBtn" title="Tela cheia" aria-label="Tela cheia">⛶</button>
     </div>
-
     <div class="toast" id="toast"></div>
   </div>
-
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
