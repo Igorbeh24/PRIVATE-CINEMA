@@ -218,6 +218,8 @@ let youtubeCurrentId = null;
 let localObjectUrl = null;
 
 let yaw = Math.PI / 2;
+let yawCenter = Math.PI / 2;
+const CAMERA_LIMIT = THREE.MathUtils.degToRad(95);
 
 let pitch = Math.atan2(
   LOOK_AT_START.y - CAMERA_START.y,
