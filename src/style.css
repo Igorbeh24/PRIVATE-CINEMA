@@ -198,7 +198,9 @@
     width: 32px;
     height: 32px;
 }
-  #playPauseBtn[hidden],
+/* Esconder controles de reprodução corretamente */
+.playback-controls[hidden],
+#playPauseBtn[hidden],
 #seekBar[hidden] {
     display: none !important;
 }
