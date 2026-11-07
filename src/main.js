@@ -2035,23 +2035,15 @@ function updatePlaybackUI() {
 
   const hasYT = !!(youtubeReady && youtubePlayer);
   const hasDirectVideo = !!videoElement;
-
   const hasMedia = hasYT || hasDirectVideo;
 
-    const canControlSeek =
+  const canControlSeek =
     hasMedia && (!currentRoom || isHost());
-
-const canControl = !currentRoom || isHost();
-
-button.hidden = !canControl;
-seek.hidden = !canControl;
-button.disabled = !hasMedia;
-seek.disabled = !canControlSeek;
 
   const canControl = !currentRoom || isHost();
 
-button.hidden = !canControl;
-seek.hidden = !canControl;
+  button.hidden = !canControl;
+  seek.hidden = !canControl;
 
   button.disabled = !hasMedia;
   seek.disabled = !canControlSeek;
@@ -2062,25 +2054,23 @@ seek.hidden = !canControl;
     playing =
       youtubePlayer.getPlayerState() ===
       window.YT.PlayerState.PLAYING;
-
   } else if (hasDirectVideo) {
     playing = !videoElement.paused;
   }
 
   button.textContent = playing ? 'Ⅱ' : '▶';
-button.setAttribute(
-  'aria-label',
-  playing ? 'Pausar' : 'Reproduzir'
-);
+
+  button.setAttribute(
+    'aria-label',
+    playing ? 'Pausar' : 'Reproduzir'
+  );
 
   if (!hasMedia) {
     seek.min = '0';
     seek.max = '100';
     seek.value = '0';
-
     return;
   }
-    
 
   const duration = hasYT
     ? Number(youtubePlayer.getDuration() || 0)
@@ -2101,7 +2091,6 @@ button.setAttribute(
     seek.value = String(currentTime);
   }
 }
-
 // ======================================================
 // UTILITÁRIOS
 // ======================================================
