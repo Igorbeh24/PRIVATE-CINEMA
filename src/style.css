@@ -10,7 +10,7 @@
 
 .playback-controls{display:flex;align-items:center;gap:10px;flex:1;max-width:330px}.playback-btn{white-space:nowrap}.control-btn:disabled{opacity:.35;cursor:not-allowed}.playback-controls input{width:100%;accent-color:#c6a77b;cursor:pointer}.playback-controls input:disabled{opacity:.3;cursor:not-allowed}@media(max-width:650px){.playback-controls{max-width:145px;gap:5px}.playback-btn{font-size:6px;padding:9px 6px}.playback-controls input{min-width:45px}.now-playing{display:none}}
 
-/* ===== Ajustes da interface PRIVATE CINEMA ===== */
+/* ===== Ajustes da interface PRIVATE CINEMA. ===== */
 
 /* Cartões de criação e entrada de sala */
 .room-card > label[for="displayName"] {
