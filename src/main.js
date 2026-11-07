@@ -5,7 +5,7 @@ import { supabase } from './lib/supabase.js';
 import './style.css';
 
 // ======================================================
-// CONFIGURAÇÕES GERAIS
+// CONFIGURAÇÕES GERAIS.
 // ======================================================
 
 const MODEL_PATH = '/models/Cine.glb';
