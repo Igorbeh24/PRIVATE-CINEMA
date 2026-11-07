@@ -281,6 +281,7 @@ function setCameraToSeat(seatNumber) {
   const dir = SCREEN_CENTER.clone().sub(pos).normalize();
 
   yaw = Math.atan2(-dir.x, -dir.z);
+  yawCenter = yaw;
 
   pitch = Math.atan2(
     dir.y,
