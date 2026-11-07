@@ -51,7 +51,7 @@
   margin-top: auto;
 }
 
-/* Cabeçalho e recolhimento do painel multiplayer */
+/* Cabeçalho do painel multiplayer */
 .room-hud-head {
   gap: 10px;
 }
@@ -67,12 +67,13 @@
   height: 29px;
   display: grid;
   place-items: center;
+  flex-shrink: 0;
   border: 1px solid rgba(255,255,255,.22);
   background: rgba(255,255,255,.04);
   color: #eee;
   font: 23px/1 'Manrope', sans-serif;
   cursor: pointer;
-  transition: transform .2s, border-color .2s, color .2s;
+  transition: border-color .2s, color .2s;
 }
 
 .room-hud-toggle:hover {
@@ -80,25 +81,34 @@
   border-color: #c6a77b;
 }
 
+/* Conteúdo do painel */
 .room-hud-content {
   overflow: hidden;
   max-height: 520px;
   opacity: 1;
-  transition: max-height .25s ease, opacity .2s ease, margin .25s ease;
+  transform: translateX(0);
+  transition:
+    transform .4s ease,
+    opacity .3s ease,
+    max-height .4s ease,
+    margin .4s ease;
 }
 
+/* Recolhimento: conteúdo desliza para fora */
 .room-hud.collapsed .room-hud-content {
-  max-height: 0;
+  transform: translateX(110%);
   opacity: 0;
+  max-height: 0;
   margin-top: 0;
   pointer-events: none;
 }
 
+/* Botão não se movimenta nem gira */
 .room-hud.collapsed .room-hud-toggle {
-  transform: rotate(180deg);
+  transform: none;
 }
 
-/* Barra inferior: reprodução centralizada e mais larga */
+/* Barra inferior */
 .bottom-controls {
   display: grid;
   grid-template-columns: auto minmax(260px, 1fr) auto;
@@ -133,7 +143,7 @@
   height: 4px;
 }
 
-/* O texto de identificação do vídeo não ocupa mais espaço na barra */
+/* Identificação do vídeo */
 .now-playing {
   display: none !important;
 }
@@ -147,6 +157,8 @@
   justify-self: end;
   margin-right: 0;
 }
+
+/* Responsividade */
 @media (max-width: 650px) {
   .room-option {
     padding: 17px;
@@ -183,41 +195,10 @@
   #fullscreenBtn {
     padding: 5px 7px;
   }
-  .room-hud.collapsed .room-hud-content {
-    display: none;
-}
 
-.room-hud.collapsed {
-    width: auto;
-    padding: 10px;
-}
-
-.room-hud-toggle {
-    cursor: pointer;
-    font-size: 24px;
+  .room-hud-toggle {
     width: 32px;
     height: 32px;
-}
-/* Animação do conteúdo */
-.room-hud-content {
-  transition:
-    transform 0.4s ease,
-    opacity 0.3s ease,
-    visibility 0.4s ease;
-}
-
-/* Conteúdo desliza para fora da tela */
-.room-hud.collapsed .room-hud-content {
-  transform: translateX(120%);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-/* Botão permanece no mesmo lugar */
-.room-hud-toggle {
-  position: relative;
-  z-index: 10;
-  transition: none;
-}
+    font-size: 24px;
+  }
 }
