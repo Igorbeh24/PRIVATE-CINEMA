@@ -1883,7 +1883,7 @@ document.addEventListener('mousemove', event => {
 // CONTROLES EXISTENTES
 // ======================================================
 
-$('#enterBtn')?.addEventListener('click', enterCinema);
+$('#homePlayBtn')?.addEventListener('click', enterCinema);
 
 $('#movieBtn')?.addEventListener('click', () => {
   panel.classList.toggle('open');
@@ -2039,14 +2039,35 @@ $('#seekBar')?.addEventListener('change', async () => {
 // CONTROLES MULTIPLAYER
 // ======================================================
 
+function openRoomGate(mode = 'all') {
+  const gate = $('#roomGate');
+  gate.dataset.mode = mode;
+  gate.hidden = false;
+  gate.classList.add('open');
+
+  // Libera a câmera caso o painel seja aberto durante o cinema.
+  if (document.pointerLockElement) {
+    document.exitPointerLock?.();
+  }
+}
+
+$('#homeCreateBtn')?.addEventListener('click', () => {
+  openRoomGate('create');
+});
+
+$('#homeJoinBtn')?.addEventListener('click', () => {
+  openRoomGate('join');
+});
+
 $('#openRoomBtn')?.addEventListener('click', () => {
-  $('#roomGate').hidden = false;
-  $('#roomGate').classList.add('open');
+  openRoomGate('all');
 });
 
 $('#closeRoomGate')?.addEventListener('click', () => {
-  $('#roomGate').classList.remove('open');
-  $('#roomGate').hidden = true;
+  const gate = $('#roomGate');
+  gate.classList.remove('open');
+  gate.hidden = true;
+  gate.dataset.mode = 'all';
 });
 
 $('#createRoomBtn')?.addEventListener('click', createRoom);
