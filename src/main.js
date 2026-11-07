@@ -2028,19 +2028,22 @@ $('#roomMovieBtn')?.addEventListener('click', () => {
 // ======================================================
 
 function updatePlaybackUI() {
-  const button = $('#playPauseBtn');
-  const seek = $('#seekBar');
+const button = $('#playPauseBtn');
+const seek = $('#seekBar');
+const controls = button?.closest('.playback-controls');
 
-  if (!button || !seek) return;
+if (!button || !seek || !controls) return;
 
   const hasYT = !!(youtubeReady && youtubePlayer);
   const hasDirectVideo = !!videoElement;
   const hasMedia = hasYT || hasDirectVideo;
 
-  // Controles aparecem apenas quando existe mídia
-// e o usuário é o anfitrião (ou está fora de uma sala).
 const canControl = hasMedia && (!currentRoom || isHost());
 
+// Ocultar o grupo inteiro de controles
+controls.hidden = !canControl;
+
+// Ocultar e desabilitar individualmente
 button.hidden = !canControl;
 seek.hidden = !canControl;
 
