@@ -366,3 +366,25 @@
   .home-multiplayer-label { margin-top: 32px; }
   .home-footer { margin-top: 30px; }
 }
+
+
+/* Barra de progresso alinhada nos modos individual e multiplayer. */
+.bottom-controls {
+  display: grid;
+  grid-template-columns: 150px minmax(260px, 1fr) auto;
+}
+#movieBtn { grid-column: 1; }
+.playback-controls { grid-column: 2; min-width: 0; }
+#fullscreenBtn { grid-column: 3; }
+#seekBar.read-only {
+  cursor: default;
+  opacity: 1;
+}
+#seekBar.read-only:disabled {
+  opacity: 1;
+}
+@media (max-width: 650px) {
+  .bottom-controls {
+    grid-template-columns: 90px minmax(100px, 1fr) auto;
+  }
+}
