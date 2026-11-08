@@ -873,80 +873,157 @@ async function ensureAuth() {
 }
 
 // ======================================================
+// ======================================================
+// ASSENTOS DISPONÍVEIS
+// ======================================================
+
+let seatLookupToken = 0;
+
+function resetSeatChoices(message = 'Informe o código da sala') {
+  const select = $('#seatChoice');
+  if (!select) return;
+  select.innerHTML = '';
+  const option = document.createElement('option');
+  option.value = '';
+  option.textContent = message;
+  option.disabled = true;
+  option.selected = true;
+  select.appendChild(option);
+  select.disabled = true;
+}
+
+async function refreshAvailableSeats() {
+  const code = $('#joinCode')?.value.trim().toUpperCase() || '';
+  const select = $('#seatChoice');
+  const token = ++seatLookupToken;
+  const previousValue = select?.value || '';
+
+  if (!select) return;
+  if (code.length !== 6) {
+    resetSeatChoices();
+    return;
+  }
+
+  resetSeatChoices('Verificando assentos...');
+  try {
+    const { data: room, error: roomError } = await supabase
+      .from('rooms').select('id, max_seats').eq('code', code).maybeSingle();
+
+    if (token !== seatLookupToken) return;
+    if (roomError) throw roomError;
+    if (!room) {
+      resetSeatChoices('Sala não encontrada');
+      return;
+    }
+
+    const { data: members, error: membersError } = await supabase
+      .from('room_members').select('seat_number').eq('room_id', room.id);
+
+    if (token !== seatLookupToken) return;
+    if (membersError) throw membersError;
+
+    const occupied = new Set((members || []).map(member => Number(member.seat_number)));
+    const available = [];
+    for (let seat = 1; seat <= Number(room.max_seats); seat++) {
+      if (!occupied.has(seat)) available.push(seat);
+    }
+
+    select.innerHTML = '';
+    if (!available.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'Nenhum assento disponível';
+      option.disabled = true;
+      option.selected = true;
+      select.appendChild(option);
+      select.disabled = true;
+      return;
+    }
+
+    available.forEach(seat => {
+      const option = document.createElement('option');
+      option.value = String(seat);
+      option.textContent = `Assento ${seat}`;
+      select.appendChild(option);
+    });
+
+    select.disabled = false;
+    select.value = available.includes(Number(previousValue)) ? previousValue : '';
+  } catch (error) {
+    if (token !== seatLookupToken) return;
+    resetSeatChoices('Não foi possível carregar os assentos');
+    console.error('Erro ao consultar assentos disponíveis:', error);
+  }
+}
+
 // CRIAR SALA
 // ======================================================
 
 async function createRoom() {
   try {
-    if (currentRoom) {
-      throw new Error('Saia da sala atual antes de criar outra.');
-    }
+    if (currentRoom) throw new Error('Saia da sala atual antes de criar outra.');
+
+    const displayName = $('#displayName').value.trim();
+    const roomName = $('#roomName').value.trim();
+    const maxSeats = $('#maxSeats').value;
+
+    if (!displayName) throw new Error('Digite seu nome para continuar.');
+    if (!roomName) throw new Error('Digite um nome para a sala.');
+    if (!maxSeats) throw new Error('Selecione a capacidade da sala.');
 
     await ensureAuth();
-
-    const name = $('#displayName').value.trim() || 'Anfitrião';
-
     const { data, error } = await supabase.rpc('create_room', {
-  p_name: $('#roomName').value.trim() || 'Cinema Privado',
-  p_max_seats: Number($('#maxSeats').value) || 12,
-  p_display_name: name
-});
-
+      p_name: roomName,
+      p_max_seats: Number(maxSeats),
+      p_display_name: displayName
+    });
     if (error) throw error;
 
     await enterRoom(data.room, data.member);
-
     showToast(`Sala ${data.room.code} criada!`);
-
   } catch (e) {
     showToast(e.message || 'Não foi possível criar a sala.');
   }
 }
 
-// ======================================================
 // ENTRAR EM UMA SALA
 // ======================================================
 
 async function joinRoom() {
   try {
-    if (currentRoom) {
-      throw new Error('Saia da sala atual antes de entrar em outra.');
-    }
+    if (currentRoom) throw new Error('Saia da sala atual antes de entrar em outra.');
+
+    const displayName = $('#displayName').value.trim();
+    const code = $('#joinCode').value.trim().toUpperCase();
+    const seatValue = $('#seatChoice').value;
+
+    if (!displayName) throw new Error('Digite seu nome para continuar.');
+    if (!code) throw new Error('Digite o código da sala.');
+    if (code.length !== 6) throw new Error('O código da sala deve ter 6 caracteres.');
+    if (!seatValue) throw new Error('Selecione um dos assentos disponíveis.');
 
     await ensureAuth();
+    await refreshAvailableSeats();
 
-    const code =
-      $('#joinCode').value.trim().toUpperCase();
-
-    const name =
-      $('#displayName').value.trim() || 'Visitante';
-
-    const seat = $('#seatChoice').value
-      ? Number($('#seatChoice').value)
-      : null;
-
-    if (!code) {
-      throw new Error('Digite o código da sala.');
+    if (!Array.from($('#seatChoice').options).some(option => option.value === seatValue)) {
+      throw new Error('Esse assento não está mais disponível. Escolha outro.');
     }
 
     const { data, error } = await supabase.rpc('join_room', {
       p_code: code,
-      p_display_name: name,
-      p_seat_number: seat
+      p_display_name: displayName,
+      p_seat_number: Number(seatValue)
     });
-
     if (error) throw error;
 
     await enterRoom(data.room, data.member);
-
     showToast(`Você entrou na sala ${data.room.code}.`);
-
   } catch (e) {
     showToast(e.message || 'Não foi possível entrar na sala.');
+    refreshAvailableSeats();
   }
 }
 
-// ======================================================
 // ENTRADA NA SALA
 // ======================================================
 
@@ -2080,6 +2157,13 @@ $('#closeRoomGate')?.addEventListener('click', () => {
 $('#createRoomBtn')?.addEventListener('click', createRoom);
 
 $('#joinRoomBtn')?.addEventListener('click', joinRoom);
+$('#joinCode')?.addEventListener('input', () => {
+  const input = $('#joinCode');
+  input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  refreshAvailableSeats();
+});
+$('#joinCode')?.addEventListener('change', refreshAvailableSeats);
+
 
 $('#leaveRoomBtn')?.addEventListener('click', leaveRoom);
 
