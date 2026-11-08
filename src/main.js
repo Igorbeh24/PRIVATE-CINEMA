@@ -951,6 +951,9 @@ async function enterRoom(room, member) {
   currentRoom = room;
   currentMember = member;
 
+  // Ao criar ou entrar em uma sala, fecha o menu inicial.
+  welcome.classList.add('hidden');
+
   setCameraToSeat(member.seat_number);
 
   $('#roomGate').hidden = true;
