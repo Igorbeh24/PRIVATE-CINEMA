@@ -1875,6 +1875,15 @@ originalScreenVisible = obj.visible;
 
     const box = new THREE.Box3().setFromObject(screenMesh);
 
+    const uv = screenMesh.geometry.attributes.uv;
+
+console.log("[TELA - UV]:", {
+  quantidade: uv?.count,
+  primeirosValores: uv
+    ? Array.from(uv.array.slice(0, 12))
+    : "Sem UV"
+});
+
     console.log("[TELA - CENTRO REAL]:", box.getCenter(new THREE.Vector3()));
     console.log("[TELA - DIMENSÕES REAIS]:", box.getSize(new THREE.Vector3()));
     console.log("[TELA - MÍNIMO]:", box.min);
