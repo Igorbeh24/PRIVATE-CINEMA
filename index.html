@@ -99,8 +99,9 @@
             <input id="roomName" class="room-input" maxlength="40" placeholder="Nome da sua sala" required />
             <label for="maxSeats">CAPACIDADE</label>
             <select id="maxSeats" class="room-input" required>
-              <option value="" disabled selected>Selecione a capacidade</option>
-              <option value="4">4 pessoas</option><option value="8">8 pessoas</option><option value="12">12 pessoas</option>
+              <option value="4" selected>4 pessoas</option>
+              <option value="8">8 pessoas</option>
+              <option value="12">12 pessoas</option>
             </select>
             <button class="load-btn wide" id="createRoomBtn" type="button">CRIAR SALA</button>
           </div>
@@ -111,12 +112,8 @@
             <label for="joinCode">CÓDIGO DA SALA</label>
             <input id="joinCode" class="room-input code-input" maxlength="6" placeholder="ABC123" autocomplete="off" required />
             <label for="seatChoice">ASSENTO</label>
-            <select id="seatChoice" class="room-input" required>
-              <option value="" disabled selected>Selecione um assento</option>
-              <option value="2">Assento 2</option><option value="3">Assento 3</option><option value="4">Assento 4</option>
-              <option value="5">Assento 5</option><option value="6">Assento 6</option><option value="7">Assento 7</option>
-              <option value="8">Assento 8</option><option value="9">Assento 9</option><option value="10">Assento 10</option>
-              <option value="11">Assento 11</option><option value="12">Assento 12</option>
+            <select id="seatChoice" class="room-input" required disabled>
+              <option value="" selected disabled>Informe o código da sala</option>
             </select>
             <button class="load-btn wide" id="joinRoomBtn" type="button">ENTRAR NA SALA</button>
           </div>
