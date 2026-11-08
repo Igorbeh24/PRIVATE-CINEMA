@@ -1986,12 +1986,13 @@ $('#playPauseBtn')?.addEventListener('click', async () => {
 // ======================================================
 
 $('#seekBar')?.addEventListener('pointerdown', () => {
-  isSeeking = true;
+  if (!currentRoom || isHost()) isSeeking = true;
 });
 
-$('#seekBar')?.addEventListener('pointerup', () => {
-  isSeeking = false;
-});
+const stopSeeking = () => { isSeeking = false; };
+$('#seekBar')?.addEventListener('pointerup', stopSeeking);
+$('#seekBar')?.addEventListener('pointercancel', stopSeeking);
+$('#seekBar')?.addEventListener('lostpointercapture', stopSeeking);
 
 $('#seekBar')?.addEventListener('input', event => {
   if (
@@ -2147,15 +2148,18 @@ function updatePlaybackUI() {
   const hasDirectVideo = !!videoElement;
   const hasPlayableMedia = hasYT || hasDirectVideo;
 
-  // Controles de reprodução somente para o anfitrião.
+  // Todos podem acompanhar o progresso. Apenas o anfitrião controla.
   const canControl = hasPlayableMedia && (!currentRoom || host);
 
-  controls.hidden = !canControl;
+  controls.hidden = !hasPlayableMedia;
   button.hidden = !canControl;
-  seek.hidden = !canControl;
+  seek.hidden = !hasPlayableMedia;
 
   button.disabled = !canControl;
-  seek.disabled = !canControl;
+  // O convidado mantém a barra visível e sem cursor de bloqueio.
+  // Os handlers de input/change impedem a alteração do tempo por convidados.
+  seek.disabled = !hasPlayableMedia;
+  seek.classList.toggle('read-only', !!currentRoom && !host);
 
   let playing = false;
 
@@ -2191,6 +2195,15 @@ function updatePlaybackUI() {
     }
   }
 }
+
+// O vídeo HTML dispara timeupdate, mas o player do YouTube não oferece
+// esse evento ao elemento da página. A atualização periódica mantém ambos
+// os tipos de player sincronizados com a barra, inclusive durante a reprodução.
+setInterval(() => {
+  if (videoElement || (youtubeReady && youtubePlayer)) {
+    updatePlaybackUI();
+  }
+}, 250);
 // ======================================================
 // UTILITÁRIOS
 // ======================================================
