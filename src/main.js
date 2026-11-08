@@ -680,6 +680,14 @@ video.addEventListener('error', () => {
   videoTexture.minFilter = THREE.LinearFilter;
   videoTexture.magFilter = THREE.LinearFilter;
   videoTexture.generateMipmaps = false;
+    videoTexture.wrapS = THREE.ClampToEdgeWrapping;
+videoTexture.wrapT = THREE.ClampToEdgeWrapping;
+
+videoTexture.repeat.set(1, 1);
+videoTexture.offset.set(0, 0);
+videoTexture.center.set(0, 0);
+videoTexture.rotation = 0;
+videoTexture.needsUpdate = true;
 
   if (screenMesh) {
     videoMaterial = new THREE.MeshBasicMaterial({
