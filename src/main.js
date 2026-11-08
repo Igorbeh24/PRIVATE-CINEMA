@@ -950,8 +950,8 @@ async function refreshAvailableSeats() {
     select.disabled = false;
 
     select.value = available.includes(Number(previousValue))
-      ? previousValue
-      : '';
+  ? previousValue
+  : String(available[0]);
 
   } catch (error) {
     if (token !== seatLookupToken) return;
