@@ -1037,9 +1037,15 @@ async function joinRoom() {
 // ENTRADA NA SALA
 // ======================================================
 
+
 async function enterRoom(room, member) {
   currentRoom = room;
   currentMember = member;
+
+  // Ativa o controle da câmera também no multiplayer.
+  entered = true;
+  hint.classList.add('visible');
+
 
   // Ao criar ou entrar em uma sala, fecha o menu inicial.
   welcome.classList.add('hidden');
