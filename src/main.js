@@ -884,6 +884,8 @@ async function createRoom() {
 
     await ensureAuth();
 
+    const name = $('#displayName').value.trim() || 'Anfitrião';
+
     const { data, error } = await supabase.rpc('create_room', {
   p_name: $('#roomName').value.trim() || 'Cinema Privado',
   p_max_seats: Number($('#maxSeats').value) || 12,
