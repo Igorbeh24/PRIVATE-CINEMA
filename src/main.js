@@ -892,6 +892,7 @@ function resetSeatChoices(message = 'Informe o código da sala') {
   select.disabled = true;
 }
 
+
 async function refreshAvailableSeats() {
   const code = $('#joinCode')?.value.trim().toUpperCase() || '';
   const select = $('#seatChoice');
@@ -899,44 +900,43 @@ async function refreshAvailableSeats() {
   const previousValue = select?.value || '';
 
   if (!select) return;
+
   if (code.length !== 6) {
     resetSeatChoices();
     return;
   }
 
   resetSeatChoices('Verificando assentos...');
+
   try {
-    const { data: room, error: roomError } = await supabase
-      .from('rooms').select('id, max_seats').eq('code', code).maybeSingle();
+    // Garante que o usuário esteja autenticado.
+    await ensureAuth();
 
     if (token !== seatLookupToken) return;
-    if (roomError) throw roomError;
-    if (!room) {
+
+    // Consulta os assentos pela função SQL do Supabase.
+    const { data: availability, error } = await supabase.rpc(
+      'get_available_seats',
+      { p_code: code }
+    );
+
+    if (token !== seatLookupToken) return;
+
+    if (error) throw error;
+
+    if (!availability || availability.found !== true) {
       resetSeatChoices('Sala não encontrada');
       return;
     }
 
-    const { data: members, error: membersError } = await supabase
-      .from('room_members').select('seat_number').eq('room_id', room.id);
-
-    if (token !== seatLookupToken) return;
-    if (membersError) throw membersError;
-
-    const occupied = new Set((members || []).map(member => Number(member.seat_number)));
-    const available = [];
-    for (let seat = 1; seat <= Number(room.max_seats); seat++) {
-      if (!occupied.has(seat)) available.push(seat);
-    }
+    const available = Array.isArray(availability.available_seats)
+      ? availability.available_seats.map(Number)
+      : [];
 
     select.innerHTML = '';
+
     if (!available.length) {
-      const option = document.createElement('option');
-      option.value = '';
-      option.textContent = 'Nenhum assento disponível';
-      option.disabled = true;
-      option.selected = true;
-      select.appendChild(option);
-      select.disabled = true;
+      resetSeatChoices('Nenhum assento disponível');
       return;
     }
 
@@ -948,13 +948,23 @@ async function refreshAvailableSeats() {
     });
 
     select.disabled = false;
-    select.value = available.includes(Number(previousValue)) ? previousValue : '';
+
+    select.value = available.includes(Number(previousValue))
+      ? previousValue
+      : '';
+
   } catch (error) {
     if (token !== seatLookupToken) return;
-    resetSeatChoices('Não foi possível carregar os assentos');
-    console.error('Erro ao consultar assentos disponíveis:', error);
+
+    resetSeatChoices('Erro ao consultar assentos');
+
+    console.error(
+      'Erro ao consultar assentos disponíveis:',
+      error
+    );
   }
 }
+
 
 // CRIAR SALA
 // ======================================================
