@@ -210,6 +210,8 @@ let originalScreenVisible = true;
 let videoElement = null;
 let videoTexture = null;
 let videoMaterial = null;
+let videoCanvas = null;
+let videoCanvasContext = null;
 let embeddedObject = null;
 
 let youtubePlayer = null;
@@ -308,6 +310,9 @@ function disposeCurrentVideo() {
         videoTexture.dispose();
         videoTexture = null;
     }
+
+    videoCanvas = null;
+    videoCanvasContext = null;
 
     if (videoMaterial) {
         videoMaterial.dispose();
@@ -660,11 +665,23 @@ function playDirectVideo(src, title = 'VÍDEO EXTERNO', remote = false) {
 
   videoElement = video;
 
-  videoTexture = new THREE.VideoTexture(videoTextureSource(video));
+  // Canvas intermediário mantém a proporção do telão e adiciona barras pretas
+  // quando o vídeo tiver uma proporção diferente, sem cortar ou deformar.
+  videoCanvas = document.createElement('canvas');
+  videoCanvas.width = 1920;
+  videoCanvas.height = Math.round(
+    videoCanvas.width * SCREEN_HEIGHT / SCREEN_WIDTH
+  );
+  videoCanvasContext = videoCanvas.getContext('2d');
+  videoCanvasContext.fillStyle = '#000000';
+  videoCanvasContext.fillRect(0, 0, videoCanvas.width, videoCanvas.height);
+
+  videoTexture = new THREE.CanvasTexture(videoCanvas);
   video.addEventListener('loadeddata', () => {
   console.log('[DIAGNÓSTICO] Vídeo carregou os primeiros quadros.');
   console.log('Dimensões:', video.videoWidth, video.videoHeight);
   console.log('Estado:', video.readyState);
+  updateVideoCanvasTexture();
 });
 
 video.addEventListener('playing', () => {
@@ -680,14 +697,6 @@ video.addEventListener('error', () => {
   videoTexture.minFilter = THREE.LinearFilter;
   videoTexture.magFilter = THREE.LinearFilter;
   videoTexture.generateMipmaps = false;
-    videoTexture.wrapS = THREE.ClampToEdgeWrapping;
-videoTexture.wrapT = THREE.ClampToEdgeWrapping;
-
-videoTexture.repeat.set(1, 1);
-videoTexture.offset.set(0, 0);
-videoTexture.center.set(0, 0);
-videoTexture.rotation = 0;
-videoTexture.needsUpdate = true;
 
   if (screenMesh) {
     videoMaterial = new THREE.MeshBasicMaterial({
@@ -715,9 +724,52 @@ videoTexture.needsUpdate = true;
 
 }
 
+function updateVideoCanvasTexture() {
+  if (
+    !videoElement ||
+    !videoCanvas ||
+    !videoCanvasContext ||
+    videoElement.readyState < 2
+  ) {
+    return;
+  }
+
+  const videoWidth = videoElement.videoWidth;
+  const videoHeight = videoElement.videoHeight;
+
+  if (!videoWidth || !videoHeight) return;
+
+  const canvasWidth = videoCanvas.width;
+  const canvasHeight = videoCanvas.height;
+
+  // Fundo preto para preencher as áreas que sobrarem.
+  videoCanvasContext.fillStyle = '#000000';
+  videoCanvasContext.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  // "Contain": mostra o quadro inteiro, preservando a proporção original.
+  const scale = Math.min(
+    canvasWidth / videoWidth,
+    canvasHeight / videoHeight
+  );
+
+  const drawWidth = videoWidth * scale;
+  const drawHeight = videoHeight * scale;
+  const x = (canvasWidth - drawWidth) / 2;
+  const y = (canvasHeight - drawHeight) / 2;
+
+  videoCanvasContext.drawImage(
+    videoElement,
+    x,
+    y,
+    drawWidth,
+    drawHeight
+  );
+
+  if (videoTexture) videoTexture.needsUpdate = true;
+}
+
 function videoTextureSource(video) {
   return video;
-    updatePlaybackUI();
 }
 
 // ======================================================
@@ -900,7 +952,6 @@ function resetSeatChoices(message = 'Informe o código da sala') {
   select.disabled = true;
 }
 
-
 async function refreshAvailableSeats() {
   const code = $('#joinCode')?.value.trim().toUpperCase() || '';
   const select = $('#seatChoice');
@@ -908,43 +959,44 @@ async function refreshAvailableSeats() {
   const previousValue = select?.value || '';
 
   if (!select) return;
-
   if (code.length !== 6) {
     resetSeatChoices();
     return;
   }
 
   resetSeatChoices('Verificando assentos...');
-
   try {
-    // Garante que o usuário esteja autenticado.
-    await ensureAuth();
+    const { data: room, error: roomError } = await supabase
+      .from('rooms').select('id, max_seats').eq('code', code).maybeSingle();
 
     if (token !== seatLookupToken) return;
-
-    // Consulta os assentos pela função SQL do Supabase.
-    const { data: availability, error } = await supabase.rpc(
-      'get_available_seats',
-      { p_code: code }
-    );
-
-    if (token !== seatLookupToken) return;
-
-    if (error) throw error;
-
-    if (!availability || availability.found !== true) {
+    if (roomError) throw roomError;
+    if (!room) {
       resetSeatChoices('Sala não encontrada');
       return;
     }
 
-    const available = Array.isArray(availability.available_seats)
-      ? availability.available_seats.map(Number)
-      : [];
+    const { data: members, error: membersError } = await supabase
+      .from('room_members').select('seat_number').eq('room_id', room.id);
+
+    if (token !== seatLookupToken) return;
+    if (membersError) throw membersError;
+
+    const occupied = new Set((members || []).map(member => Number(member.seat_number)));
+    const available = [];
+    for (let seat = 1; seat <= Number(room.max_seats); seat++) {
+      if (!occupied.has(seat)) available.push(seat);
+    }
 
     select.innerHTML = '';
-
     if (!available.length) {
-      resetSeatChoices('Nenhum assento disponível');
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'Nenhum assento disponível';
+      option.disabled = true;
+      option.selected = true;
+      select.appendChild(option);
+      select.disabled = true;
       return;
     }
 
@@ -956,23 +1008,13 @@ async function refreshAvailableSeats() {
     });
 
     select.disabled = false;
-
-    select.value = available.includes(Number(previousValue))
-  ? previousValue
-  : String(available[0]);
-
+    select.value = available.includes(Number(previousValue)) ? previousValue : '';
   } catch (error) {
     if (token !== seatLookupToken) return;
-
-    resetSeatChoices('Erro ao consultar assentos');
-
-    console.error(
-      'Erro ao consultar assentos disponíveis:',
-      error
-    );
+    resetSeatChoices('Não foi possível carregar os assentos');
+    console.error('Erro ao consultar assentos disponíveis:', error);
   }
 }
-
 
 // CRIAR SALA
 // ======================================================
@@ -1045,15 +1087,9 @@ async function joinRoom() {
 // ENTRADA NA SALA
 // ======================================================
 
-
 async function enterRoom(room, member) {
   currentRoom = room;
   currentMember = member;
-
-  // Ativa o controle da câmera também no multiplayer.
-  entered = true;
-  hint.classList.add('visible');
-
 
   // Ao criar ou entrar em uma sala, fecha o menu inicial.
   welcome.classList.add('hidden');
@@ -1883,15 +1919,6 @@ originalScreenVisible = obj.visible;
 
     const box = new THREE.Box3().setFromObject(screenMesh);
 
-    const uv = screenMesh.geometry.attributes.uv;
-
-console.log("[TELA - UV]:", {
-  quantidade: uv?.count,
-  primeirosValores: uv
-    ? Array.from(uv.array.slice(0, 12))
-    : "Sem UV"
-});
-
     console.log("[TELA - CENTRO REAL]:", box.getCenter(new THREE.Vector3()));
     console.log("[TELA - DIMENSÕES REAIS]:", box.getSize(new THREE.Vector3()));
     console.log("[TELA - MÍNIMO]:", box.min);
@@ -2363,6 +2390,10 @@ window.addEventListener('beforeunload', () => {
 
 function animate() {
   requestAnimationFrame(animate);
+
+  if (videoElement && !videoElement.paused) {
+    updateVideoCanvasTexture();
+  }
 
   renderer.render(scene, camera);
   cssRenderer.render(scene, camera);
