@@ -1234,9 +1234,11 @@ async function refreshAvailableSeats() {
 
     select.disabled = false;
 
-    select.value = available.includes(Number(previousValue))
-      ? previousValue
-      : '';
+    const sortedSeats = [...available].map(Number).sort((a, b) => a - b);
+
+select.value = sortedSeats.includes(Number(previousValue))
+  ? previousValue
+  : String(sortedSeats[0]);
 
   } catch (error) {
     if (token !== seatLookupToken) return;
@@ -1343,15 +1345,20 @@ async function joinRoom() {
 // ======================================================
 
 async function enterRoom(room, member) {
+
+  // Encerra o vídeo da sessão individual.
+  disposeCurrentVideo();
+
+  // Limpa a referência da mídia anterior.
+  lastLoadedRemoteMedia = null;
+
   currentRoom = room;
   currentMember = member;
 
-  // Libera os controles da câmera para anfitrião e visitantes.
+  // Libera os controles da câmera.
   entered = true;
-  currentRoom = room;
-  currentMember = member;
 
-  // Ao criar ou entrar em uma sala, fecha o menu inicial.
+  // Fecha o menu inicial.
   welcome.classList.add('hidden');
 
   setCameraToSeat(member.seat_number);
