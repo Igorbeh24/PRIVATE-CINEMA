@@ -258,6 +258,8 @@ const pendingIceCandidates = new Map();
 
 let heartbeatTimer = null;
 let isLeavingRoom = false;
+let roomRecoveryInProgress = false;
+let lastRoomRecoveryAt = 0;
 
 // ======================================================
 // NOTIFICAÇÕES
@@ -1497,12 +1499,11 @@ async function subscribeRoom() {
 .on('presence', { event: 'leave' }, ({ key }) => {
   closePeer(key);
 
-  // Detecta quando o anfitrião desconecta inesperadamente.
+  // Uma saída do Presence pode ser apenas uma desconexão temporária.
+  // Não encerramos a sala automaticamente.
   if (key === currentRoom?.host_id && !isHost()) {
-    void leaveRoom({
-      notifyOthers: false,
-      toastMessage: 'O anfitrião saiu. Você voltou ao início.'
-    });
+    setRoomStatus('ANFITRIÃO REconectando…');
+    console.warn('O anfitrião perdeu temporariamente a conexão.');
   }
 });
 
@@ -1533,6 +1534,83 @@ async function subscribeRoom() {
 
   });
 }
+
+// ======================================================
+// RECUPERAÇÃO AUTOMÁTICA DA SALA
+// ======================================================
+
+async function recoverRoomConnection() {
+  if (
+    !currentRoom ||
+    !currentMember ||
+    isLeavingRoom ||
+    roomRecoveryInProgress
+  ) {
+    return;
+  }
+
+  const now = Date.now();
+
+  // Evita várias tentativas simultâneas.
+  if (now - lastRoomRecoveryAt < 3000) return;
+
+  lastRoomRecoveryAt = now;
+  roomRecoveryInProgress = true;
+
+  try {
+    setRoomStatus('REconectando…');
+
+    // Atualiza a presença do participante no banco.
+    const { error: heartbeatError } =
+      await supabase.rpc('room_heartbeat');
+
+    if (heartbeatError) throw heartbeatError;
+
+    // Busca novamente o estado real da sala.
+    await refreshRoomState();
+
+    // Reconecta o canal somente se não estiver conectado.
+    if (!roomChannel || roomChannel.state !== 'joined') {
+      await subscribeRoom();
+    }
+
+    // Atualiza a reprodução dos visitantes.
+    if (!isHost() && currentRoom?.media_url) {
+      await applyRemoteRoomPlayback(currentRoom);
+    }
+
+    // Atualiza o estado do anfitrião no banco.
+    if (isHost() && currentRoom?.media_url) {
+      let playbackStatus = currentRoom.playback_status || 'paused';
+
+      if (videoElement) {
+        playbackStatus = videoElement.paused ? 'paused' : 'playing';
+      } else if (youtubeReady && youtubePlayer) {
+        const state = youtubePlayer.getPlayerState();
+        const playerState = window.YT?.PlayerState;
+
+        playbackStatus =
+          state === playerState?.PLAYING ? 'playing' : 'paused';
+      }
+
+      await publishPlayback(playbackStatus, undefined, true);
+    }
+
+    setRoomStatus('CONECTADO');
+
+    console.log('Private Cinema: conexão recuperada.');
+  } catch (error) {
+    console.warn(
+      'Não foi possível recuperar a conexão da sala:',
+      error
+    );
+
+    setRoomStatus('REconectando…');
+  } finally {
+    roomRecoveryInProgress = false;
+  }
+}
+
 // ======================================================
 // SINCRONIZAÇÃO DA REPRODUÇÃO
 // ======================================================
