@@ -971,7 +971,7 @@ function broadcastAvatarLook(force = false) {
   });
 }
 
-const DUCK_SIDE_OFFSET = -0.5;
+const DUCK_SIDE_OFFSET = -0.525;
 
 function createDuckAvatar(member) {
   if (!duckTemplate || !member?.user_id) return null;
@@ -990,7 +990,7 @@ function createDuckAvatar(member) {
 
   avatarRoot.position.copy(seat)
   .add(duckSeatOffset)
-  .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 0, 0));
+  .add(new THREE.Vector3(0, 0, DUCK_SIDE_OFFSET));
 
   const headBone = getDuckHeadBone(avatarRoot);
   if (!headBone) {
@@ -2828,4 +2828,4 @@ function animate() {
   cssRenderer.render(scene, camera);
 }
 updatePlaybackUI();
-animate();m
+animate();
