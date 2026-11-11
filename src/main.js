@@ -2651,6 +2651,32 @@ $('#roomMovieBtn')?.addEventListener('click', () => {
 // INTERFACE DE REPRODUÇÃO
 // ======================================================
 
+// ======================================================
+// EVENTOS DE VISIBILIDADE E CONEXÃO
+// ======================================================
+
+// Quando o usuário retorna à aba.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    void recoverRoomConnection();
+  }
+});
+
+// Quando a janela recebe foco novamente.
+window.addEventListener('focus', () => {
+  void recoverRoomConnection();
+});
+
+// Quando a conexão com a internet retorna.
+window.addEventListener('online', () => {
+  void recoverRoomConnection();
+});
+
+// Quando a página é restaurada pelo navegador.
+window.addEventListener('pageshow', () => {
+  void recoverRoomConnection();
+});
+
 function updatePlaybackUI() {
   const button = $('#playPauseBtn');
   const seek = $('#seekBar');
