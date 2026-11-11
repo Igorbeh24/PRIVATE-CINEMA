@@ -1286,22 +1286,37 @@ async function createRoom() {
 
 async function joinRoom() {
   try {
-    if (currentRoom) throw new Error('Saia da sala atual antes de entrar em outra.');
+    if (currentRoom) {
+      throw new Error('Saia da sala atual antes de entrar em outra.');
+    }
 
     const displayName = $('#displayName').value.trim();
     const code = $('#joinCode').value.trim().toUpperCase();
-    const seatValue = $('#seatChoice').value;
 
-    if (!displayName) throw new Error('Digite seu nome para continuar.');
-    if (!code) throw new Error('Digite o código da sala.');
-    if (code.length !== 6) throw new Error('O código da sala deve ter 6 caracteres.');
-    if (!seatValue) throw new Error('Selecione um dos assentos disponíveis.');
+    if (!displayName) {
+      throw new Error('Digite seu nome para continuar.');
+    }
+
+    if (!code || code.length !== 6) {
+      throw new Error('Digite um código de sala válido.');
+    }
 
     await ensureAuth();
+
+    // Atualiza os assentos antes de obter a seleção.
     await refreshAvailableSeats();
 
-    if (!Array.from($('#seatChoice').options).some(option => option.value === seatValue)) {
-      throw new Error('Esse assento não está mais disponível. Escolha outro.');
+    const select = $('#seatChoice');
+    const seatValue = select.value;
+
+    if (!seatValue || select.disabled) {
+      throw new Error('Nenhum assento disponível. Verifique a sala.');
+    }
+
+    if (!Array.from(select.options).some(
+      option => option.value === seatValue && !option.disabled
+    )) {
+      throw new Error('Esse assento não está mais disponível.');
     }
 
     const { data, error } = await supabase.rpc('join_room', {
@@ -1309,13 +1324,18 @@ async function joinRoom() {
       p_display_name: displayName,
       p_seat_number: Number(seatValue)
     });
+
     if (error) throw error;
 
     await enterRoom(data.room, data.member);
+
     showToast(`Você entrou na sala ${data.room.code}.`);
-  } catch (e) {
-    showToast(e.message || 'Não foi possível entrar na sala.');
-    refreshAvailableSeats();
+
+  } catch (error) {
+    console.error('Erro ao entrar na sala:', error);
+    showToast(error.message || 'Não foi possível entrar na sala.');
+
+    void refreshAvailableSeats();
   }
 }
 
@@ -1323,6 +1343,11 @@ async function joinRoom() {
 // ======================================================
 
 async function enterRoom(room, member) {
+  currentRoom = room;
+  currentMember = member;
+
+  // Libera os controles da câmera para anfitrião e visitantes.
+  entered = true;
   currentRoom = room;
   currentMember = member;
 
@@ -2650,32 +2675,6 @@ $('#roomMovieBtn')?.addEventListener('click', () => {
 // ======================================================
 // INTERFACE DE REPRODUÇÃO
 // ======================================================
-
-// ======================================================
-// EVENTOS DE VISIBILIDADE E CONEXÃO
-// ======================================================
-
-// Quando o usuário retorna à aba.
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) {
-    void recoverRoomConnection();
-  }
-});
-
-// Quando a janela recebe foco novamente.
-window.addEventListener('focus', () => {
-  void recoverRoomConnection();
-});
-
-// Quando a conexão com a internet retorna.
-window.addEventListener('online', () => {
-  void recoverRoomConnection();
-});
-
-// Quando a página é restaurada pelo navegador.
-window.addEventListener('pageshow', () => {
-  void recoverRoomConnection();
-});
 
 function updatePlaybackUI() {
   const button = $('#playPauseBtn');
