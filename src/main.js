@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { supabase } from './lib/supabase.js';
 import './style.css';
@@ -204,6 +205,11 @@ function updateSeatMarkers() {
 // ======================================================
 
 let screenMesh = null;
+let duckTemplate = null;
+let duckSeatOffset = new THREE.Vector3();
+const duckAvatars = new Map();
+const pendingDuckLooks = new Map();
+let lastAvatarLookSentAt = 0;
 let originalScreenMaterial = null;
 let originalScreenVisible = true;
 
@@ -230,6 +236,7 @@ let pitch = Math.atan2(
     LOOK_AT_START.z - CAMERA_START.z
   )
 );
+let pitchCenter = pitch;
 
 let entered = false;
 
@@ -290,6 +297,7 @@ function setCameraToSeat(seatNumber) {
     dir.y,
     Math.hypot(dir.x, dir.z)
   );
+  pitchCenter = pitch;
 
   updateCamera();
 }
@@ -864,6 +872,219 @@ function setRoomStatus(text) {
   $('#roomStatus').textContent = text;
 }
 
+// ======================================================
+// AVATARES DE PATO - MULTIPLAYER
+// ======================================================
+
+function getDuckHeadBone(root) {
+  // No Cine.glb atual, os ossos exportados se chamam Bone e Bone.001.
+  // Bone.001 é o osso filho (cabeça). O fallback permite renomeá-los no Blender.
+  const namedHead = root.getObjectByName('head');
+  if (namedHead?.isBone) return namedHead;
+
+  const exportedHead = root.getObjectByName('Bone.001');
+  if (exportedHead?.isBone) return exportedHead;
+
+  const bones = [];
+  root.traverse(object => {
+    if (object.isBone) bones.push(object);
+  });
+
+  const boneDepth = bone => {
+    let depth = 0;
+    let parent = bone.parent;
+    while (parent) {
+      if (parent.isBone) depth++;
+      parent = parent.parent;
+    }
+    return depth;
+  };
+
+  bones.sort((a, b) => boneDepth(b) - boneDepth(a));
+  return bones[0] || null;
+}
+
+function getAvatarLookFromCamera() {
+  let relativeYaw = yaw - yawCenter;
+  relativeYaw = Math.atan2(Math.sin(relativeYaw), Math.cos(relativeYaw));
+
+  return {
+    yaw: THREE.MathUtils.clamp(
+      relativeYaw,
+      THREE.MathUtils.degToRad(-55),
+      THREE.MathUtils.degToRad(55)
+    ),
+    pitch: THREE.MathUtils.clamp(
+      pitch - pitchCenter,
+      THREE.MathUtils.degToRad(-32),
+      THREE.MathUtils.degToRad(32)
+    )
+  };
+}
+
+function applyDuckLook(avatar, look, immediate = false) {
+  if (!avatar || !look) return;
+
+  avatar.targetYaw = THREE.MathUtils.clamp(
+    Number(look.yaw) || 0,
+    THREE.MathUtils.degToRad(-55),
+    THREE.MathUtils.degToRad(55)
+  );
+  avatar.targetPitch = THREE.MathUtils.clamp(
+    Number(look.pitch) || 0,
+    THREE.MathUtils.degToRad(-32),
+    THREE.MathUtils.degToRad(32)
+  );
+
+  if (immediate) {
+    avatar.currentYaw = avatar.targetYaw;
+    avatar.currentPitch = avatar.targetPitch;
+  }
+}
+
+function broadcastAvatarLook(force = false) {
+  if (!currentRoom || !currentMember || !roomChannel) return;
+
+  const now = performance.now();
+  if (!force && now - lastAvatarLookSentAt < 70) return;
+  lastAvatarLookSentAt = now;
+
+  const look = getAvatarLookFromCamera();
+  const payload = {
+    user_id: currentMember.user_id,
+    yaw: look.yaw,
+    pitch: look.pitch
+  };
+
+  // Aplica localmente também; a cópia do próprio pato fica fora da visão FPS.
+  const localAvatar = duckAvatars.get(currentMember.user_id);
+  if (localAvatar) applyDuckLook(localAvatar, look);
+
+  void roomChannel.send({
+    type: 'broadcast',
+    event: 'avatar-look',
+    payload
+  }).catch(error => {
+    console.warn('Não foi possível sincronizar a direção do pato:', error);
+  });
+}
+
+function createDuckAvatar(member) {
+  if (!duckTemplate || !member?.user_id) return null;
+
+  const avatarRoot = cloneSkeleton(duckTemplate);
+  avatarRoot.name = `DuckAvatar_${member.user_id}`;
+  avatarRoot.visible = true;
+
+  // O GLB guarda o pato-modelo próximo ao primeiro assento.
+  // Reutilizamos esse deslocamento para posicionar cada cópia no assento correto.
+  const seat = SEAT_POSITIONS[Number(member.seat_number) - 1];
+  if (!seat) {
+    console.warn('Assento inválido para o pato:', member.seat_number);
+    return null;
+  }
+
+  avatarRoot.position.copy(seat).add(duckSeatOffset);
+
+  const headBone = getDuckHeadBone(avatarRoot);
+  if (!headBone) {
+    console.warn('Osso da cabeça não encontrado no pato:', member.user_id);
+    return null;
+  }
+
+  const avatar = {
+    root: avatarRoot,
+    headBone,
+    baseHeadQuaternion: headBone.quaternion.clone(),
+    currentYaw: 0,
+    currentPitch: 0,
+    targetYaw: 0,
+    targetPitch: 0
+  };
+
+  // SkinnedMesh precisa permanecer dentro do clone da armature.
+  avatarRoot.traverse(object => {
+    if (object.isSkinnedMesh) object.frustumCulled = false;
+  });
+
+  // Em primeira pessoa, o próprio pato fica na posição do jogador e não deve
+  // aparecer atravessando a câmera. Os outros participantes o enxergam normalmente.
+  avatarRoot.visible = member.user_id !== currentMember?.user_id;
+
+  scene.add(avatarRoot);
+
+  const pendingLook = pendingDuckLooks.get(member.user_id);
+  if (pendingLook) {
+    applyDuckLook(avatar, pendingLook, true);
+    pendingDuckLooks.delete(member.user_id);
+  }
+
+  return avatar;
+}
+
+function syncDuckAvatars() {
+  if (!currentRoom || !duckTemplate) return;
+
+  const activeIds = new Set(
+    roomMembers.map(member => member.user_id).filter(Boolean)
+  );
+
+  for (const [userId, avatar] of duckAvatars) {
+    if (!activeIds.has(userId)) {
+      scene.remove(avatar.root);
+      duckAvatars.delete(userId);
+    }
+  }
+
+  for (const member of roomMembers) {
+    if (!member?.user_id) continue;
+
+    let avatar = duckAvatars.get(member.user_id);
+
+    if (!avatar) {
+      avatar = createDuckAvatar(member);
+      if (!avatar) continue;
+      duckAvatars.set(member.user_id, avatar);
+    } else {
+      const seat = SEAT_POSITIONS[Number(member.seat_number) - 1];
+      if (seat) avatar.root.position.copy(seat).add(duckSeatOffset);
+      avatar.root.visible = member.user_id !== currentMember?.user_id;
+    }
+  }
+}
+
+function clearDuckAvatars() {
+  for (const avatar of duckAvatars.values()) {
+    scene.remove(avatar.root);
+  }
+  duckAvatars.clear();
+  pendingDuckLooks.clear();
+}
+
+function updateDuckAnimations(deltaSeconds = 1 / 60) {
+  if (!duckAvatars.size) return;
+
+  const smoothing = 1 - Math.exp(-14 * Math.max(0, deltaSeconds));
+
+  for (const avatar of duckAvatars.values()) {
+    avatar.currentYaw += (avatar.targetYaw - avatar.currentYaw) * smoothing;
+    avatar.currentPitch += (avatar.targetPitch - avatar.currentPitch) * smoothing;
+
+    const movement = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(
+        avatar.currentPitch,
+        avatar.currentYaw,
+        0,
+        'YXZ'
+      )
+    );
+
+    avatar.headBone.quaternion
+      .copy(avatar.baseHeadQuaternion)
+      .multiply(movement);
+  }
+}
+
 function renderMembers() {
   const list = $('#memberList');
 
@@ -892,6 +1113,7 @@ function renderMembers() {
   $('#roomCount').textContent =
     `${roomMembers.length}/${currentRoom?.max_seats || 0} PARTICIPANTES`;
 
+  syncDuckAvatars();
   updatePlaybackUI();
 
   $('#hostControls').hidden = !isHost();
@@ -1095,6 +1317,7 @@ async function enterRoom(room, member) {
   welcome.classList.add('hidden');
 
   setCameraToSeat(member.seat_number);
+  lastAvatarLookSentAt = 0;
 
   $('#roomGate').hidden = true;
   $('#roomHud').hidden = false;
@@ -1205,6 +1428,32 @@ async function subscribeRoom() {
 
     .on(
       'broadcast',
+      { event: 'avatar-look' },
+      ({ payload }) => {
+        if (!payload?.user_id || payload.user_id === currentMember?.user_id) return;
+
+        const look = { yaw: payload.yaw, pitch: payload.pitch };
+        const avatar = duckAvatars.get(payload.user_id);
+
+        if (avatar) {
+          applyDuckLook(avatar, look);
+        } else {
+          pendingDuckLooks.set(payload.user_id, look);
+        }
+      }
+    )
+
+    .on(
+      'broadcast',
+      { event: 'avatar-look-request' },
+      ({ payload }) => {
+        if (payload?.user_id === currentMember?.user_id) return;
+        broadcastAvatarLook(true);
+      }
+    )
+
+    .on(
+      'broadcast',
       { event: 'rtc-signal' },
       ({ payload }) => {
         handleSignal(payload);
@@ -1213,6 +1462,12 @@ async function subscribeRoom() {
 
     .on('presence', { event: 'sync' }, () => {
       connectPresentPeers();
+      broadcastAvatarLook(true);
+      void roomChannel.send({
+        type: 'broadcast',
+        event: 'avatar-look-request',
+        payload: { user_id: currentMember?.user_id }
+      });
     })
 
     .on(
@@ -1251,6 +1506,12 @@ async function subscribeRoom() {
       });
 
       setRoomStatus('CONECTADO');
+      broadcastAvatarLook(true);
+      void roomChannel.send({
+        type: 'broadcast',
+        event: 'avatar-look-request',
+        payload: { user_id: currentMember.user_id }
+      });
 
     } else if (
       status === 'CHANNEL_ERROR' ||
@@ -1556,6 +1817,7 @@ async function leaveRoom({
     console.warn('Saída da sala:', error);
 
   } finally {
+    clearDuckAvatars();
     currentRoom = null;
     currentMember = null;
     roomMembers = [];
@@ -1914,6 +2176,35 @@ originalScreenVisible = obj.visible;
     });
 
     scene.add(model);
+
+    // O pato já está dentro do Cine.glb. No arquivo exportado, a armature
+    // se chama Armature e os ossos são Bone (corpo) e Bone.001 (cabeça).
+    duckTemplate = model.getObjectByName('Armature');
+
+    if (duckTemplate) {
+      duckTemplate.updateWorldMatrix(true, true);
+
+      const templateWorldPosition = new THREE.Vector3();
+      duckTemplate.getWorldPosition(templateWorldPosition);
+      duckSeatOffset.copy(templateWorldPosition).sub(SEAT_POSITIONS[0]);
+
+      // A cópia original serve apenas como molde; os avatares visíveis são clones.
+      duckTemplate.visible = false;
+
+      const exportedBones = [];
+      duckTemplate.traverse(object => {
+        if (object.isBone) exportedBones.push(object.name);
+      });
+
+      console.log('[PATOS] Armature encontrada:', duckTemplate.name);
+      console.log('[PATOS] Ossos exportados:', exportedBones);
+      console.log('[PATOS] Deslocamento do avatar em relação à câmera:', duckSeatOffset);
+
+      syncDuckAvatars();
+    } else {
+      console.warn('[PATOS] Armature não encontrada dentro de Cine.glb.');
+    }
+
     if (screenMesh) {
     screenMesh.updateWorldMatrix(true, false);
 
@@ -2020,6 +2311,7 @@ document.addEventListener('mousemove', event => {
   pitch = THREE.MathUtils.clamp(pitch, -1, 1);
 
   updateCamera();
+  if (currentRoom) broadcastAvatarLook();
 });
 
 // ======================================================
@@ -2388,8 +2680,16 @@ window.addEventListener('beforeunload', () => {
 // ANIMAÇÃO PRINCIPAL
 // ======================================================
 
+let previousAnimationTime = performance.now();
+
 function animate() {
   requestAnimationFrame(animate);
+
+  const now = performance.now();
+  const deltaSeconds = Math.min((now - previousAnimationTime) / 1000, 0.05);
+  previousAnimationTime = now;
+
+  updateDuckAnimations(deltaSeconds);
 
   if (videoElement && !videoElement.paused) {
     updateVideoCanvasTexture();
