@@ -971,6 +971,8 @@ function broadcastAvatarLook(force = false) {
   });
 }
 
+const DUCK_SIDE_OFFSET = 0.15;
+
 function createDuckAvatar(member) {
   if (!duckTemplate || !member?.user_id) return null;
 
@@ -986,7 +988,9 @@ function createDuckAvatar(member) {
     return null;
   }
 
-  avatarRoot.position.copy(seat).add(duckSeatOffset);
+  avatarRoot.position.copy(seat)
+  .add(duckSeatOffset)
+  .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 0, 0));
 
   const headBone = getDuckHeadBone(avatarRoot);
   if (!headBone) {
@@ -1049,7 +1053,11 @@ function syncDuckAvatars() {
       duckAvatars.set(member.user_id, avatar);
     } else {
       const seat = SEAT_POSITIONS[Number(member.seat_number) - 1];
-      if (seat) avatar.root.position.copy(seat).add(duckSeatOffset);
+      if (seat) {
+  avatar.root.position.copy(seat)
+    .add(duckSeatOffset)
+    .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 0, 3));
+}
       avatar.root.visible = member.user_id !== currentMember?.user_id;
     }
   }
