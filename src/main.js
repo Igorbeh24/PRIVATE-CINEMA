@@ -1056,7 +1056,7 @@ function syncDuckAvatars() {
       if (seat) {
   avatar.root.position.copy(seat)
     .add(duckSeatOffset)
-    .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 0, 3));
+    .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 5, 0));
 }
       avatar.root.visible = member.user_id !== currentMember?.user_id;
     }
