@@ -1174,6 +1174,7 @@ function resetSeatChoices(message = 'Informe o código da sala') {
   select.disabled = true;
 }
 
+
 async function refreshAvailableSeats() {
   const code = $('#joinCode')?.value.trim().toUpperCase() || '';
   const select = $('#seatChoice');
@@ -1181,36 +1182,36 @@ async function refreshAvailableSeats() {
   const previousValue = select?.value || '';
 
   if (!select) return;
+
   if (code.length !== 6) {
     resetSeatChoices();
     return;
   }
 
   resetSeatChoices('Verificando assentos...');
+
   try {
-    const { data: room, error: roomError } = await supabase
-      .from('rooms').select('id, max_seats').eq('code', code).maybeSingle();
+    // Garante que existe uma sessão autenticada.
+    await ensureAuth();
+
+    // Consulta os assentos pela função do Supabase.
+    const { data, error } = await supabase.rpc(
+      'get_available_seats',
+      { p_code: code }
+    );
 
     if (token !== seatLookupToken) return;
-    if (roomError) throw roomError;
-    if (!room) {
+    if (error) throw error;
+
+    if (!data?.found) {
       resetSeatChoices('Sala não encontrada');
       return;
     }
 
-    const { data: members, error: membersError } = await supabase
-      .from('room_members').select('seat_number').eq('room_id', room.id);
-
-    if (token !== seatLookupToken) return;
-    if (membersError) throw membersError;
-
-    const occupied = new Set((members || []).map(member => Number(member.seat_number)));
-    const available = [];
-    for (let seat = 1; seat <= Number(room.max_seats); seat++) {
-      if (!occupied.has(seat)) available.push(seat);
-    }
+    const available = data.available_seats || [];
 
     select.innerHTML = '';
+
     if (!available.length) {
       const option = document.createElement('option');
       option.value = '';
@@ -1230,13 +1231,23 @@ async function refreshAvailableSeats() {
     });
 
     select.disabled = false;
-    select.value = available.includes(Number(previousValue)) ? previousValue : '';
+
+    select.value = available.includes(Number(previousValue))
+      ? previousValue
+      : '';
+
   } catch (error) {
     if (token !== seatLookupToken) return;
+
     resetSeatChoices('Não foi possível carregar os assentos');
-    console.error('Erro ao consultar assentos disponíveis:', error);
+
+    console.error(
+      'Erro ao consultar assentos disponíveis:',
+      error
+    );
   }
 }
+
 
 // CRIAR SALA
 // ======================================================
