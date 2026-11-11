@@ -971,7 +971,7 @@ function broadcastAvatarLook(force = false) {
   });
 }
 
-const DUCK_SIDE_OFFSET = 0.15;
+const DUCK_SIDE_OFFSET = -0.5;
 
 function createDuckAvatar(member) {
   if (!duckTemplate || !member?.user_id) return null;
@@ -1056,7 +1056,7 @@ function syncDuckAvatars() {
       if (seat) {
   avatar.root.position.copy(seat)
     .add(duckSeatOffset)
-    .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 5, 0));
+    .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 0, 0));
 }
       avatar.root.visible = member.user_id !== currentMember?.user_id;
     }
@@ -2828,4 +2828,4 @@ function animate() {
   cssRenderer.render(scene, camera);
 }
 updatePlaybackUI();
-animate();
+animate();m
