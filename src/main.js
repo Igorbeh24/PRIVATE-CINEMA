@@ -971,7 +971,18 @@ function broadcastAvatarLook(force = false) {
   });
 }
 
-const DUCK_SIDE_OFFSET = -0.525;
+const DUCK_SIDE_OFFSET = 0.525;
+
+function getSeatYaw(seatNumber) {
+  const seat = SEAT_POSITIONS[Number(seatNumber) - 1];
+  if (!seat) return 0;
+
+  const direction = SCREEN_CENTER.clone()
+    .sub(seat)
+    .normalize();
+
+  return Math.atan2(-direction.x, -direction.z);
+}
 
 function createDuckAvatar(member) {
   if (!duckTemplate || !member?.user_id) return null;
@@ -991,6 +1002,8 @@ function createDuckAvatar(member) {
   avatarRoot.position.copy(seat)
   .add(duckSeatOffset)
   .add(new THREE.Vector3(0, 0, DUCK_SIDE_OFFSET));
+
+  avatarRoot.rotation.y = getSeatYaw(member.seat_number);
 
   const headBone = getDuckHeadBone(avatarRoot);
   if (!headBone) {
@@ -1056,7 +1069,9 @@ function syncDuckAvatars() {
       if (seat) {
   avatar.root.position.copy(seat)
     .add(duckSeatOffset)
-    .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 0, 0));
+    .add(new THREE.Vector3(0, 0, DUCK_SIDE_OFFSET));
+
+  avatar.root.rotation.y = getSeatYaw(member.seat_number);
 }
       avatar.root.visible = member.user_id !== currentMember?.user_id;
     }
