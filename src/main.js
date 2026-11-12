@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
@@ -911,8 +912,8 @@ function getAvatarLookFromCamera() {
   return {
     yaw: THREE.MathUtils.clamp(
       relativeYaw,
-      THREE.MathUtils.degToRad(-95),
-      THREE.MathUtils.degToRad(95)
+      THREE.MathUtils.degToRad(-89),
+      THREE.MathUtils.degToRad(89)
     ),
     pitch: THREE.MathUtils.clamp(
       pitch - pitchCenter,
@@ -926,8 +927,8 @@ function applyDuckLook(avatar, look, immediate = false) {
   if (!avatar || !look) return;
   avatar.targetYaw = THREE.MathUtils.clamp(
     Number(look.yaw) || 0,
-    THREE.MathUtils.degToRad(-95),
-    THREE.MathUtils.degToRad(95)
+    THREE.MathUtils.degToRad(-89),
+    THREE.MathUtils.degToRad(89)
   );
   avatar.targetPitch = THREE.MathUtils.clamp(
     Number(look.pitch) || 0,
