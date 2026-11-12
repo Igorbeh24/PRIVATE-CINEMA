@@ -32,7 +32,7 @@ const SEAT_CONFIG = {
   total: 13,
   columns: 13,
   startX: 6.6,
-  startY: 2.65,
+  startY: 2.5,
   startZ: -3.15,
   columnSpacing: 0.525,
   showNumbers: true,
