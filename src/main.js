@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
@@ -288,17 +289,15 @@ function updateCamera() {
 function setCameraToSeat(seatNumber) {
   const pos = SEAT_POSITIONS[seatNumber - 1] || CAMERA_START;
 
+  // Posiciona a câmera no assento do participante.
   camera.position.copy(pos);
 
-  const dir = SCREEN_CENTER.clone().sub(pos).normalize();
-
-  yaw = Math.atan2(-dir.x, -dir.z);
+  // Direciona a câmera para a frente, sem mirar na tela.
+  yaw = Math.PI / 2;
   yawCenter = yaw;
 
-  pitch = Math.atan2(
-    dir.y,
-    Math.hypot(dir.x, dir.z)
-  );
+  // Mantém a câmera na horizontal.
+  pitch = 0;
   pitchCenter = pitch;
 
   updateCamera();
@@ -1023,7 +1022,12 @@ function createDuckAvatar(member) {
   const avatar = {
     root: avatarRoot,
     headBone,
-    baseHeadQuaternion: headBone.quaternion.clone(),
+    baseHeadQuaternion: headBone.quaternion.clone().multiply(
+  new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    getSeatHeadYaw(member.seat_number) - getSeatYawReference()
+  )
+),
     currentYaw: 0,
     currentPitch: 0,
     targetYaw: 0,
