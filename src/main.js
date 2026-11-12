@@ -12,7 +12,7 @@ import './style.css';
 
 const MODEL_PATH = '/models/Cine.glb';
 
-const CAMERA_START = new THREE.Vector3(6.55, 2.6, 0);
+const CAMERA_START = new THREE.Vector3(7.2, 2.6, 0);
 const LOOK_AT_START = new THREE.Vector3(-4.42, 3.88, 0);
 
 const SCREEN_NAME = 'Screen';
@@ -287,16 +287,18 @@ function updateCamera() {
 }
 
 function setCameraToSeat(seatNumber) {
-  const pos = SEAT_POSITIONS[seatNumber - 1] || CAMERA_START;
+  const pos = SEAT_POSITIONS[seatNumber - 1];
 
-  // Posiciona a câmera no assento do participante.
-  camera.position.copy(pos);
+  if (pos) {
+    camera.position.copy(pos);
+    camera.position.x += 0.65;
+  } else {
+    camera.position.copy(CAMERA_START);
+  }
 
-  // Direciona a câmera para a frente, sem mirar na tela.
   yaw = Math.PI / 2;
   yawCenter = yaw;
 
-  // Mantém a câmera na horizontal.
   pitch = 0;
   pitchCenter = pitch;
 
