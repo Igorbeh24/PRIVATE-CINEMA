@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
@@ -927,8 +926,8 @@ function applyDuckLook(avatar, look, immediate = false) {
   if (!avatar || !look) return;
   avatar.targetYaw = THREE.MathUtils.clamp(
     Number(look.yaw) || 0,
-    THREE.MathUtils.degToRad(-55),
-    THREE.MathUtils.degToRad(55)
+    THREE.MathUtils.degToRad(-95),
+    THREE.MathUtils.degToRad(95)
   );
   avatar.targetPitch = THREE.MathUtils.clamp(
     Number(look.pitch) || 0,
