@@ -1044,7 +1044,8 @@ function createDuckAvatar(member) {
 
   // Em primeira pessoa, o próprio pato fica na posição do jogador e não deve
   // aparecer atravessando a câmera. Os outros participantes o enxergam normalmente.
-  avatarRoot.visible = true;
+  // O próprio pato permanece invisível; os demais ficam visíveis.
+  avatarRoot.visible = member.user_id !== currentMember?.user_id;
 
   scene.add(avatarRoot);
 
@@ -1080,16 +1081,20 @@ function syncDuckAvatars() {
       avatar = createDuckAvatar(member);
       if (!avatar) continue;
       duckAvatars.set(member.user_id, avatar);
-    } else {
+        } else {
       const seat = SEAT_POSITIONS[Number(member.seat_number) - 1];
+
       if (seat) {
-  avatar.root.position.copy(seat)
-    .add(duckSeatOffset)
-    .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 0, 0));
-}
+        avatar.root.position.copy(seat)
+          .add(duckSeatOffset)
+          .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 0, 0));
+      }
+
       avatar.root.visible = member.user_id !== currentMember?.user_id;
     }
   }
+
+  updateDuckVisibility();
 }
 
 function clearDuckAvatars() {
