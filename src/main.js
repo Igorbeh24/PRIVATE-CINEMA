@@ -1084,12 +1084,12 @@ function syncDuckAvatars() {
       const seat = SEAT_POSITIONS[Number(member.seat_number) - 1];
 
       if (seat) {
-        avatar.root.position.copy(seat)
-          .add(duckSeatOffset)
-          .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 0, 0));
-      }
+  avatar.root.position.copy(seat)
+    .add(duckSeatOffset)
+    .add(new THREE.Vector3(0, 0, DUCK_SIDE_OFFSET));
+}
 
-      avatar.root.visible = member.user_id !== currentMember?.user_id;
+avatar.root.visible = member.user_id !== currentMember?.user_id;
     }
   }
 
@@ -2845,6 +2845,7 @@ window.addEventListener('beforeunload', () => {
 // ======================================================
 
 let previousAnimationTime = performance.now();
+let lastDuckDiagnosticAt = 0;
 
 function animate() {
   requestAnimationFrame(animate);
@@ -2858,6 +2859,22 @@ function animate() {
   if (videoElement && !videoElement.paused) {
     updateVideoCanvasTexture();
   }
+
+  if (currentRoom && now - lastDuckDiagnosticAt >= 5000) {
+  lastDuckDiagnosticAt = now;
+
+  console.log('[DIAGNÓSTICO DOS PATOS]', {
+    quantidade: duckAvatars.size,
+    participantes: roomMembers.length,
+
+    patos: [...duckAvatars.entries()].map(([id, avatar]) => ({
+      id,
+      visivel: avatar.root.visible,
+      naCena: avatar.root.parent === scene,
+      posicao: avatar.root.position.toArray()
+    }))
+  });
+}
 
   renderer.render(scene, camera);
   cssRenderer.render(scene, camera);
