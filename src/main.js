@@ -912,8 +912,8 @@ function getAvatarLookFromCamera() {
   return {
     yaw: THREE.MathUtils.clamp(
       relativeYaw,
-      THREE.MathUtils.degToRad(-55),
-      THREE.MathUtils.degToRad(55)
+      THREE.MathUtils.degToRad(-85),
+      THREE.MathUtils.degToRad(85)
     ),
     pitch: THREE.MathUtils.clamp(
       pitch - pitchCenter,
