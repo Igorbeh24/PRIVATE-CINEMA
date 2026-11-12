@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
@@ -993,9 +994,7 @@ function getSeatHeadYaw(seatNumber) {
 
 function updateDuckVisibility() {
   for (const [userId, avatar] of duckAvatars) {
-    const isLocalPlayer = userId === currentMember?.user_id;
-
-    avatar.root.visible = !isLocalPlayer || !isFirstPersonLocked;
+    avatar.root.visible = userId !== currentMember?.user_id;
   }
 }
 
@@ -1003,8 +1002,7 @@ function createDuckAvatar(member) {
   if (!duckTemplate || !member?.user_id) return null;
 
   const avatarRoot = cloneSkeleton(duckTemplate);
-  avatarRoot.name = `DuckAvatar_${member.user_id}`;
-  avatarRoot.visible = true;
+  avatarRoot.visible = member.user_id !== currentMember?.user_id;
 
   // O GLB guarda o pato-modelo próximo ao primeiro assento.
   // Reutilizamos esse deslocamento para posicionar cada cópia no assento correto.
@@ -1089,7 +1087,7 @@ function syncDuckAvatars() {
     .add(duckSeatOffset)
     .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 0, 0));
 }
-      avatar.root.visible = true;
+      avatar.root.visible = member.user_id !== currentMember?.user_id;
     }
   }
 }
