@@ -927,7 +927,6 @@ function getAvatarLookFromCamera() {
 
 function applyDuckLook(avatar, look, immediate = false) {
   if (!avatar || !look) return;
-
   avatar.targetYaw = THREE.MathUtils.clamp(
     Number(look.yaw) || 0,
     THREE.MathUtils.degToRad(-55),
@@ -1064,14 +1063,14 @@ function syncDuckAvatars() {
   const activeIds = new Set(
     roomMembers.map(member => member.user_id).filter(Boolean)
   );
-
+/*
   for (const [userId, avatar] of duckAvatars) {
     if (!activeIds.has(userId)) {
       scene.remove(avatar.root);
       duckAvatars.delete(userId);
     }
   }
-
+*/
   for (const member of roomMembers) {
     if (!member?.user_id) continue;
 
