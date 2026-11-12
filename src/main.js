@@ -12,7 +12,7 @@ import './style.css';
 
 const MODEL_PATH = '/models/Cine.glb';
 
-const CAMERA_START = new THREE.Vector3(6.7, 2.6, 0);
+const CAMERA_START = new THREE.Vector3(6.6, 2.6, 0);
 const LOOK_AT_START = new THREE.Vector3(-4.42, 3.88, 0);
 
 const SCREEN_NAME = 'Screen';
@@ -291,7 +291,7 @@ function setCameraToSeat(seatNumber) {
 
   if (pos) {
     camera.position.copy(pos);
-    camera.position.x += 0.15;
+    camera.position.x += 0.05;
   } else {
     camera.position.copy(CAMERA_START);
   }
@@ -2897,4 +2897,4 @@ function animate() {
   cssRenderer.render(scene, camera);
 }
 updatePlaybackUI();
-animate();
+animate();m
