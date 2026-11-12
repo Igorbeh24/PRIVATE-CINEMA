@@ -291,7 +291,7 @@ function setCameraToSeat(seatNumber) {
 
   if (pos) {
     camera.position.copy(pos);
-    camera.position.x += 0.5;
+    camera.position.x += 0;
   } else {
     camera.position.copy(CAMERA_START);
   }
