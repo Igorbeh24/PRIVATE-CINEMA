@@ -2864,16 +2864,33 @@ function animate() {
   lastDuckDiagnosticAt = now;
 
   console.log('[DIAGNÓSTICO DOS PATOS]', {
-    quantidade: duckAvatars.size,
-    participantes: roomMembers.length,
+  quantidade: duckAvatars.size,
+  participantes: roomMembers.length,
 
-    patos: [...duckAvatars.entries()].map(([id, avatar]) => ({
-      id,
-      visivel: avatar.root.visible,
-      naCena: avatar.root.parent === scene,
-      posicao: avatar.root.position.toArray()
-    }))
-  });
+  patos: [...duckAvatars.entries()].map(([id, avatar]) => ({
+    id: id,
+    visivel: avatar.root.visible,
+    naCena: avatar.root.parent === scene,
+    posicao: avatar.root.position.toArray(),
+    escala: avatar.root.scale.toArray(),
+
+    objetos: (() => {
+      const resultado = [];
+
+      avatar.root.traverse(obj => {
+        if (obj.isMesh || obj.isSkinnedMesh) {
+          resultado.push({
+            nome: obj.name,
+            visivel: obj.visible,
+            tipo: obj.type
+          });
+        }
+      });
+
+      return resultado;
+    })()
+  }))
+});
 }
 
   renderer.render(scene, camera);
