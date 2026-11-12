@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
@@ -1024,12 +1023,7 @@ function createDuckAvatar(member) {
   const avatar = {
     root: avatarRoot,
     headBone,
-    baseHeadQuaternion: headBone.quaternion.clone().multiply(
-  new THREE.Quaternion().setFromAxisAngle(
-    new THREE.Vector3(0, 1, 0),
-    getSeatHeadYaw(member.seat_number) - getSeatYawReference()
-  )
-),
+    baseHeadQuaternion: headBone.quaternion.clone(),
     currentYaw: 0,
     currentPitch: 0,
     targetYaw: 0,
