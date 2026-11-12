@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
@@ -259,6 +258,7 @@ const pendingIceCandidates = new Map();
 
 let heartbeatTimer = null;
 let isLeavingRoom = false;
+let unloadAccessToken = null;
 let roomRecoveryInProgress = false;
 let lastRoomRecoveryAt = 0;
 
@@ -1195,6 +1195,9 @@ async function ensureAuth() {
 
   const { data } = await supabase.auth.getUser();
 
+  const { data: sessionData } = await supabase.auth.getSession();
+unloadAccessToken = sessionData.session?.access_token || null;
+
   return data.user;
 }
 
@@ -1460,13 +1463,17 @@ async function refreshRoomState() {
 // SUPABASE REALTIME
 // ======================================================
 
+
 async function subscribeRoom() {
   if (roomChannel) {
     await supabase.removeChannel(roomChannel);
+    roomChannel = null;
   }
 
+  const subscribedRoomId = currentRoom.id;
+
   roomChannel = supabase.channel(
-    `cinema-${currentRoom.id}`,
+    `cinema-${subscribedRoomId}`,
     {
       config: {
         presence: {
@@ -1481,18 +1488,32 @@ async function subscribeRoom() {
 
   roomChannel
 
+    // ==================================================
+    // ATUALIZAÇÃO DOS PARTICIPANTES
+    // ==================================================
+
     .on(
       'postgres_changes',
       {
         event: '*',
         schema: 'public',
         table: 'room_members',
-        filter: `room_id=eq.${currentRoom.id}`
+        filter: `room_id=eq.${subscribedRoomId}`
       },
       async () => {
-        await refreshRoomState();
-      }
+  if (!currentRoom || currentRoom.id !== subscribedRoomId) return;
+
+  try {
+    await refreshRoomState();
+  } catch (error) {
+    console.warn('Não foi possível atualizar os participantes:', error);
+  }
+}
     )
+
+    // ==================================================
+    // ATUALIZAÇÃO DA SALA
+    // ==================================================
 
     .on(
       'postgres_changes',
@@ -1500,18 +1521,52 @@ async function subscribeRoom() {
         event: 'UPDATE',
         schema: 'public',
         table: 'rooms',
-        filter: `id=eq.${currentRoom.id}`
+        filter: `id=eq.${subscribedRoomId}`
       },
       payload => {
+        if (!currentRoom || currentRoom.id !== subscribedRoomId) return;
+
         currentRoom = payload.new;
 
         if (!isHost()) {
-          applyRemoteRoomPlayback(currentRoom);
+          void applyRemoteRoomPlayback(currentRoom);
         }
 
         renderMembers();
       }
     )
+
+        // ==================================================
+    // SALA EXCLUÍDA
+    // ==================================================
+
+    .on(
+      'postgres_changes',
+      {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'rooms'
+      },
+      payload => {
+        if (
+          payload.old?.id !== subscribedRoomId ||
+          !currentRoom ||
+          currentRoom.id !== subscribedRoomId ||
+          isHost()
+        ) {
+          return;
+        }
+
+        void leaveRoom({
+          notifyOthers: false,
+          toastMessage: 'O anfitrião saiu. A sala foi encerrada.'
+        });
+      }
+    )
+
+    // ==================================================
+    // DIREÇÃO DA CABEÇA DOS PATOS
+    // ==================================================
 
     .on(
       'broadcast',
@@ -1519,7 +1574,11 @@ async function subscribeRoom() {
       ({ payload }) => {
         if (!payload?.user_id || payload.user_id === currentMember?.user_id) return;
 
-        const look = { yaw: payload.yaw, pitch: payload.pitch };
+        const look = {
+          yaw: payload.yaw,
+          pitch: payload.pitch
+        };
+
         const avatar = duckAvatars.get(payload.user_id);
 
         if (avatar) {
@@ -1530,14 +1589,23 @@ async function subscribeRoom() {
       }
     )
 
+    // ==================================================
+    // SOLICITAÇÃO DE DIREÇÃO DOS AVATARES
+    // ==================================================
+
     .on(
       'broadcast',
       { event: 'avatar-look-request' },
       ({ payload }) => {
         if (payload?.user_id === currentMember?.user_id) return;
+
         broadcastAvatarLook(true);
       }
     )
+
+    // ==================================================
+    // SINALIZAÇÃO WEBRTC
+    // ==================================================
 
     .on(
       'broadcast',
@@ -1547,39 +1615,59 @@ async function subscribeRoom() {
       }
     )
 
+    // ==================================================
+    // PRESENÇA: SINCRONIZAÇÃO
+    // ==================================================
+
     .on('presence', { event: 'sync' }, () => {
       connectPresentPeers();
       broadcastAvatarLook(true);
+
       void roomChannel.send({
         type: 'broadcast',
         event: 'avatar-look-request',
-        payload: { user_id: currentMember?.user_id }
+        payload: {
+          user_id: currentMember?.user_id
+        }
       });
     })
 
+    // ==================================================
+    // ANFITRIÃO SAIU
+    // ==================================================
+
     .on(
-  'broadcast',
-  { event: 'host-left' },
-  () => {
-    if (!isHost()) {
-      void leaveRoom({
-        notifyOthers: false,
-        toastMessage: 'O anfitrião encerrou a sala. Você voltou ao início.'
-      });
-    }
-  }
-)
+      'broadcast',
+      { event: 'host-left' },
+      () => {
+        if (!isHost()) {
+          void leaveRoom({
+            notifyOthers: false,
+            toastMessage: 'O anfitrião encerrou a sala. Você voltou ao início.'
+          });
+        }
+      }
+    )
 
-.on('presence', { event: 'leave' }, ({ key }) => {
-  closePeer(key);
+    // ==================================================
+    // PARTICIPANTE DESCONECTOU
+    // ==================================================
 
-  // Uma saída do Presence pode ser apenas uma desconexão temporária.
-  // Não encerramos a sala automaticamente.
-  if (key === currentRoom?.host_id && !isHost()) {
-    setRoomStatus('ANFITRIÃO REconectando…');
-    console.warn('O anfitrião perdeu temporariamente a conexão.');
-  }
-});
+    .on('presence', { event: 'leave' }, ({ key }) => {
+      closePeer(key);
+
+      if (key === currentRoom?.host_id && !isHost()) {
+        setRoomStatus('ANFITRIÃO REconectando…');
+
+        console.warn(
+          'O anfitrião perdeu temporariamente a conexão.'
+        );
+      }
+    });
+
+  // ==================================================
+  // CONECTAR AO CANAL
+  // ==================================================
 
   await roomChannel.subscribe(async status => {
 
@@ -1592,11 +1680,15 @@ async function subscribeRoom() {
       });
 
       setRoomStatus('CONECTADO');
+
       broadcastAvatarLook(true);
+
       void roomChannel.send({
         type: 'broadcast',
         event: 'avatar-look-request',
-        payload: { user_id: currentMember.user_id }
+        payload: {
+          user_id: currentMember.user_id
+        }
       });
 
     } else if (
@@ -1608,6 +1700,7 @@ async function subscribeRoom() {
 
   });
 }
+
 
 // ======================================================
 // RECUPERAÇÃO AUTOMÁTICA DA SALA
@@ -2830,10 +2923,25 @@ window.addEventListener('resize', resize);
 // ENCERRAMENTO
 // ======================================================
 
-window.addEventListener('beforeunload', () => {
+window.addEventListener('pagehide', () => {
   clearInterval(heartbeatTimer);
 
   stopVoice();
+
+  if (currentRoom && currentMember && unloadAccessToken) {
+    fetch(`${supabase.supabaseUrl}/rest/v1/rpc/leave_room`, {
+      method: 'POST',
+      headers: {
+        apikey: supabase.supabaseKey,
+        Authorization: `Bearer ${unloadAccessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: '{}',
+      keepalive: true
+    }).catch(error => {
+      console.warn('Falha ao encerrar a sala ao sair:', error);
+    });
+  }
 
   if (localObjectUrl) {
     URL.revokeObjectURL(localObjectUrl);
@@ -2897,4 +3005,4 @@ function animate() {
   cssRenderer.render(scene, camera);
 }
 updatePlaybackUI();
-animate();m
+animate();
