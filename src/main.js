@@ -12,7 +12,7 @@ import './style.css';
 
 const MODEL_PATH = '/models/Cine.glb';
 
-const CAMERA_START = new THREE.Vector3(6.55, 2.5, 0);
+const CAMERA_START = new THREE.Vector3(6.55, 2.6, 0);
 const LOOK_AT_START = new THREE.Vector3(-4.42, 3.88, 0);
 
 const SCREEN_NAME = 'Screen';
@@ -32,7 +32,7 @@ const SEAT_CONFIG = {
   total: 13,
   columns: 13,
   startX: 6.6,
-  startY: 2.5,
+  startY: 2.6,
   startZ: -3.15,
   columnSpacing: 0.525,
   showNumbers: true,
