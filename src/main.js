@@ -1057,20 +1057,23 @@ function createDuckAvatar(member) {
   return avatar;
 }
 
+
 function syncDuckAvatars() {
   if (!currentRoom || !duckTemplate) return;
 
   const activeIds = new Set(
     roomMembers.map(member => member.user_id).filter(Boolean)
   );
-/*
+
+  // Remove os patos de participantes que não estão mais na sala.
   for (const [userId, avatar] of duckAvatars) {
     if (!activeIds.has(userId)) {
       scene.remove(avatar.root);
       duckAvatars.delete(userId);
     }
   }
-*/
+
+  // Cria ou atualiza os patos dos participantes atuais.
   for (const member of roomMembers) {
     if (!member?.user_id) continue;
 
@@ -1078,19 +1081,21 @@ function syncDuckAvatars() {
 
     if (!avatar) {
       avatar = createDuckAvatar(member);
+
       if (!avatar) continue;
+
       duckAvatars.set(member.user_id, avatar);
-        } else {
+    } else {
       const seat = SEAT_POSITIONS[Number(member.seat_number) - 1];
 
       if (seat) {
-  avatar.root.position.copy(seat)
-    .add(duckSeatOffset)
-    .add(new THREE.Vector3(0, 0, DUCK_SIDE_OFFSET));
-}
-
-avatar.root.visible = member.user_id !== currentMember?.user_id;
+        avatar.root.position.copy(seat)
+          .add(duckSeatOffset)
+          .add(new THREE.Vector3(0, 0, DUCK_SIDE_OFFSET));
+      }
     }
+
+    avatar.root.visible = member.user_id !== currentMember?.user_id;
   }
 
   updateDuckVisibility();
