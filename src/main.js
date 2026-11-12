@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
@@ -240,7 +239,7 @@ let pitch = Math.atan2(
 let pitchCenter = pitch;
 
 let entered = false;
-
+let isFirstPersonLocked = false;
 let currentRoom = null;
 let currentMember = null;
 let roomChannel = null;
@@ -992,6 +991,14 @@ function getSeatHeadYaw(seatNumber) {
   return Math.atan2(-direction.x, -direction.z);
 }
 
+function updateDuckVisibility() {
+  for (const [userId, avatar] of duckAvatars) {
+    const isLocalPlayer = userId === currentMember?.user_id;
+
+    avatar.root.visible = !isLocalPlayer || !isFirstPersonLocked;
+  }
+}
+
 function createDuckAvatar(member) {
   if (!duckTemplate || !member?.user_id) return null;
 
@@ -1039,7 +1046,7 @@ function createDuckAvatar(member) {
 
   // Em primeira pessoa, o próprio pato fica na posição do jogador e não deve
   // aparecer atravessando a câmera. Os outros participantes o enxergam normalmente.
-  avatarRoot.visible = member.user_id !== currentMember?.user_id;
+  avatarRoot.visible = true;
 
   scene.add(avatarRoot);
 
@@ -1082,7 +1089,7 @@ function syncDuckAvatars() {
     .add(duckSeatOffset)
     .add(new THREE.Vector3(DUCK_SIDE_OFFSET, 0, 0));
 }
-      avatar.root.visible = member.user_id !== currentMember?.user_id;
+      avatar.root.visible = true;
     }
   }
 }
@@ -1149,6 +1156,7 @@ function renderMembers() {
 
   syncDuckAvatars();
   updatePlaybackUI();
+  updateDuckVisibility();
 
   $('#hostControls').hidden = !isHost();
 
@@ -2434,6 +2442,8 @@ document.addEventListener('pointerlockchange', () => {
     document.pointerLockElement === renderer.domElement;
 
   renderer.domElement.style.cursor = locked ? 'none' : 'grab';
+  isFirstPersonLocked = locked;
+updateDuckVisibility();
 
   if (entered && !locked) {
     hint.classList.add('visible');
