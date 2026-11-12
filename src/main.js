@@ -2445,7 +2445,6 @@ document.addEventListener('pointerlockchange', () => {
 
   renderer.domElement.style.cursor = locked ? 'none' : 'grab';
   isFirstPersonLocked = locked;
-updateDuckVisibility();
 
   if (entered && !locked) {
     hint.classList.add('visible');
