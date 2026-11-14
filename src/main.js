@@ -34,7 +34,7 @@ const SEAT_CONFIG = {
   startY: 2.6,
   startZ: -3.15,
   columnSpacing: 0.525,
-  showNumbers: true,
+  showNumbers: false,
   markerHeight: 0.8,
   markerSize: 0.38
 };
