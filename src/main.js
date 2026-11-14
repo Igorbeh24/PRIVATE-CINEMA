@@ -41,13 +41,66 @@ const SEAT_CONFIG = {
 
 const MAX_SEATS = SEAT_CONFIG.total;
 
-const SEAT_POSITIONS = Array.from({ length: MAX_SEATS }, (_, i) => {
-  return new THREE.Vector3(
-    SEAT_CONFIG.startX,
-    SEAT_CONFIG.startY,
-    SEAT_CONFIG.startZ + i * SEAT_CONFIG.columnSpacing
-  );
-});
+// As posições e rotações reais vêm dos cubos CAD2 até CAD14 do Cine.glb.
+// CAD1 e CAD15 são deliberadamente ignorados.
+const SEAT_POSITIONS = new Array(MAX_SEATS).fill(null);
+const SEAT_DIRECTIONS = new Array(MAX_SEATS).fill(null);
+const SEAT_YAWS = new Array(MAX_SEATS).fill(null);
+let baseSeatYaw = Math.PI / 2;
+let cameraHeightOffset = 1.04;
+let duckBaseQuaternion = new THREE.Quaternion();
+
+function readSeatMarkers(model) {
+  let found = 0;
+
+  for (let index = 0; index < MAX_SEATS; index++) {
+    const markerName = `CAD${index + 2}`;
+    const marker = model.getObjectByName(markerName);
+
+    if (!marker) {
+      console.error(`[ASSENTOS] Marcador ${markerName} não encontrado no Cine.glb.`);
+      continue;
+    }
+
+    marker.updateWorldMatrix(true, false);
+
+    const position = marker.getWorldPosition(new THREE.Vector3());
+
+    // No Blender, a frente dos assentos corresponde ao eixo local -X.
+    // transformDirection usa a matriz completa, inclusive escalas negativas
+    // que aparecem nos marcadores do lado direito do modelo.
+    const forward = new THREE.Vector3(-1, 0, 0)
+      .transformDirection(marker.matrixWorld)
+      .normalize();
+
+    const seatYaw = Math.atan2(-forward.x, -forward.z);
+
+    SEAT_POSITIONS[index] = position;
+    SEAT_DIRECTIONS[index] = forward;
+    SEAT_YAWS[index] = seatYaw;
+
+    // Os cubos são apenas referências invisíveis para posicionamento.
+    marker.visible = false;
+    found++;
+
+    console.log(
+      `[ASSENTO ${index + 1}] ${markerName}`,
+      `posição: (${position.x.toFixed(3)}, ${position.y.toFixed(3)}, ${position.z.toFixed(3)})`,
+      `yaw: ${(THREE.MathUtils.radToDeg(seatYaw)).toFixed(2)}°`
+    );
+  }
+
+  if (found !== MAX_SEATS) {
+    console.error(`[ASSENTOS] Foram encontrados ${found} de ${MAX_SEATS} marcadores CAD2–CAD14.`);
+  }
+
+  if (SEAT_POSITIONS[0] && SEAT_YAWS[0] !== null) {
+    baseSeatYaw = SEAT_YAWS[0];
+    cameraHeightOffset = CAMERA_START.y - SEAT_POSITIONS[0].y;
+  }
+
+  return found;
+}
 
 const STUN_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' }
@@ -192,7 +245,7 @@ function updateSeatMarkers() {
   if (!SEAT_CONFIG.showNumbers) return;
 
   SEAT_POSITIONS.forEach((position, index) => {
-    createSeatLabel(index + 1, position);
+    if (position) createSeatLabel(index + 1, position);
   });
 
   console.log('================================');
@@ -287,18 +340,23 @@ function updateCamera() {
 }
 
 function setCameraToSeat(seatNumber) {
-  const pos = SEAT_POSITIONS[seatNumber - 1];
+  const index = Number(seatNumber) - 1;
+  const pos = SEAT_POSITIONS[index];
+  const seatYaw = SEAT_YAWS[index];
 
-  if (pos) {
+  if (pos && seatYaw !== null && seatYaw !== undefined) {
+    // A câmera fica na altura dos olhos, diretamente acima do cubo CAD.
     camera.position.copy(pos);
-    camera.position.x += 0.05;
+    camera.position.y += cameraHeightOffset;
+
+    // A direção inicial acompanha a rotação individual do assento.
+    yaw = seatYaw;
   } else {
     camera.position.copy(CAMERA_START);
+    yaw = Math.PI / 2;
   }
 
-  yaw = Math.PI / 2;
   yawCenter = yaw;
-
   pitch = 0;
   pitchCenter = pitch;
 
@@ -971,24 +1029,33 @@ function broadcastAvatarLook(force = false) {
   });
 }
 
-const DUCK_SIDE_OFFSET = 0.525;
+function applyAvatarSeatTransform(avatar, seatNumber) {
+  if (!avatar) return;
 
-function getSeatYawReference() {
-  const seat = SEAT_POSITIONS[0];
-  const direction = SCREEN_CENTER.clone().sub(seat).normalize();
+  const index = Number(seatNumber) - 1;
+  const seat = SEAT_POSITIONS[index];
+  const seatYaw = SEAT_YAWS[index];
 
-  return Math.atan2(-direction.x, -direction.z);
-}
+  if (!seat || seatYaw === null || seatYaw === undefined) return;
 
-function getSeatHeadYaw(seatNumber) {
-  const seat = SEAT_POSITIONS[Number(seatNumber) - 1];
-  if (!seat) return 0;
+  // Rotaciona também o deslocamento do pato em relação ao marcador-base,
+  // mantendo o personagem centralizado sobre o cubo de cada cadeira.
+  const yawDelta = seatYaw - baseSeatYaw;
+  const offset = duckSeatOffset.clone().applyAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    yawDelta
+  );
 
-  const direction = SCREEN_CENTER.clone()
-    .sub(seat)
-    .normalize();
+  avatar.root.position.copy(seat).add(offset);
 
-  return Math.atan2(-direction.x, -direction.z);
+  // O modelo do pato mantém sua orientação original, recebendo a diferença
+  // angular entre o CAD2 (assento-base do modelo) e o CAD correspondente.
+  const seatRotation = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    yawDelta
+  );
+
+  avatar.root.quaternion.copy(seatRotation).multiply(duckBaseQuaternion);
 }
 
 function updateDuckVisibility() {
@@ -1003,17 +1070,13 @@ function createDuckAvatar(member) {
   const avatarRoot = cloneSkeleton(duckTemplate);
   avatarRoot.visible = member.user_id !== currentMember?.user_id;
 
-  // O GLB guarda o pato-modelo próximo ao primeiro assento.
-  // Reutilizamos esse deslocamento para posicionar cada cópia no assento correto.
-  const seat = SEAT_POSITIONS[Number(member.seat_number) - 1];
-  if (!seat) {
-    console.warn('Assento inválido para o pato:', member.seat_number);
+  const seatIndex = Number(member.seat_number) - 1;
+  const seat = SEAT_POSITIONS[seatIndex];
+
+  if (!seat || SEAT_YAWS[seatIndex] === null || SEAT_YAWS[seatIndex] === undefined) {
+    console.warn('Assento inválido ou marcador CAD ausente para o pato:', member.seat_number);
     return null;
   }
-
-  avatarRoot.position.copy(seat)
-  .add(duckSeatOffset)
-  .add(new THREE.Vector3(0, 0, DUCK_SIDE_OFFSET));
 
   const headBone = getDuckHeadBone(avatarRoot);
   if (!headBone) {
@@ -1024,17 +1087,14 @@ function createDuckAvatar(member) {
   const avatar = {
     root: avatarRoot,
     headBone,
-    baseHeadQuaternion: headBone.quaternion.clone().multiply(
-  new THREE.Quaternion().setFromAxisAngle(
-    new THREE.Vector3(0, 1, 0),
-    getSeatHeadYaw(member.seat_number) - getSeatYawReference()
-  )
-),
+    baseHeadQuaternion: headBone.quaternion.clone(),
     currentYaw: 0,
     currentPitch: 0,
     targetYaw: 0,
     targetPitch: 0
   };
+
+  applyAvatarSeatTransform(avatar, member.seat_number);
 
   // SkinnedMesh precisa permanecer dentro do clone da armature.
   avatarRoot.traverse(object => {
@@ -1086,13 +1146,7 @@ function syncDuckAvatars() {
 
       duckAvatars.set(member.user_id, avatar);
     } else {
-      const seat = SEAT_POSITIONS[Number(member.seat_number) - 1];
-
-      if (seat) {
-        avatar.root.position.copy(seat)
-          .add(duckSeatOffset)
-          .add(new THREE.Vector3(0, 0, DUCK_SIDE_OFFSET));
-      }
+      applyAvatarSeatTransform(avatar, member.seat_number);
     }
 
     avatar.root.visible = member.user_id !== currentMember?.user_id;
@@ -2438,6 +2492,10 @@ originalScreenVisible = obj.visible;
 
     scene.add(model);
 
+    // Lê CAD2–CAD14 depois de adicionar o modelo à cena, para obter
+    // as coordenadas e direções em espaço global (world space).
+    readSeatMarkers(model);
+
     // O pato já está dentro do Cine.glb. No arquivo exportado, a armature
     // se chama Armature e os ossos são Bone (corpo) e Bone.001 (cabeça).
     duckTemplate = model.getObjectByName('Armature');
@@ -2446,8 +2504,14 @@ originalScreenVisible = obj.visible;
       duckTemplate.updateWorldMatrix(true, true);
 
       const templateWorldPosition = new THREE.Vector3();
+      const templateWorldQuaternion = new THREE.Quaternion();
       duckTemplate.getWorldPosition(templateWorldPosition);
-      duckSeatOffset.copy(templateWorldPosition).sub(SEAT_POSITIONS[0]);
+      duckTemplate.getWorldQuaternion(templateWorldQuaternion);
+
+      if (SEAT_POSITIONS[0]) {
+        duckSeatOffset.copy(templateWorldPosition).sub(SEAT_POSITIONS[0]);
+      }
+      duckBaseQuaternion.copy(templateWorldQuaternion);
 
       // A cópia original serve apenas como molde; os avatares visíveis são clones.
       duckTemplate.visible = false;
@@ -2459,7 +2523,7 @@ originalScreenVisible = obj.visible;
 
       console.log('[PATOS] Armature encontrada:', duckTemplate.name);
       console.log('[PATOS] Ossos exportados:', exportedBones);
-      console.log('[PATOS] Deslocamento do avatar em relação à câmera:', duckSeatOffset);
+      console.log('[PATOS] Deslocamento em relação ao CAD2:', duckSeatOffset);
 
       syncDuckAvatars();
     } else {
