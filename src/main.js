@@ -1029,7 +1029,7 @@ function broadcastAvatarLook(force = false) {
 }
 
 // Distância mínima entre a base do pato e o ponto CAD do assento.
-const DUCK_FOOT_CLEARANCE = 0.025;
+const DUCK_FOOT_CLEARANCE = 0.25;
 
 function applyAvatarSeatTransform(avatar, seatNumber) {
   if (!avatar?.root) return;
