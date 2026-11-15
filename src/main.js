@@ -49,6 +49,7 @@ const SEAT_YAWS = new Array(MAX_SEATS).fill(null);
 let baseSeatYaw = Math.PI / 2;
 let cameraHeightOffset = 1.04;
 let duckBaseQuaternion = new THREE.Quaternion();
+let duckBaseYaw = 0;
 
 function readSeatMarkers(model) {
   let found = 0;
@@ -1029,7 +1030,7 @@ function broadcastAvatarLook(force = false) {
 }
 
 // Distância mínima entre a base do pato e o ponto CAD do assento.
-const DUCK_FOOT_CLEARANCE = 0.25;
+const DUCK_FOOT_CLEARANCE = 0.4;
 
 function applyAvatarSeatTransform(avatar, seatNumber) {
   if (!avatar?.root) return;
@@ -1040,8 +1041,10 @@ function applyAvatarSeatTransform(avatar, seatNumber) {
 
   if (!seat || seatYaw === null || seatYaw === undefined) return;
 
-  // Cada pato recebe a rotação específica do marcador CAD correspondente.
-  const yawDelta = seatYaw - baseSeatYaw;
+  // A frente original do pato é o eixo local +X da armature.
+  // duckBaseYaw é calculado a partir da rotação real do modelo no GLB,
+  // em vez de presumir que o pato já está alinhado com o CAD2.
+  const yawDelta = seatYaw - duckBaseYaw;
   const seatRotation = new THREE.Quaternion().setFromAxisAngle(
     new THREE.Vector3(0, 1, 0),
     yawDelta
@@ -2531,6 +2534,20 @@ originalScreenVisible = obj.visible;
       // Os clones são adicionados diretamente à cena; portanto guardamos
       // a orientação global original da armature, não sua posição de origem.
       duckBaseQuaternion.copy(templateWorldQuaternion);
+
+      // No modelo exportado, a frente do pato (lado do rosto/bico) aponta
+      // para o eixo local +X da armature. Convertemos essa direção para
+      // espaço global para alinhar cada clone diretamente ao seu CAD.
+      const duckForward = new THREE.Vector3(1, 0, 0)
+        .applyQuaternion(templateWorldQuaternion)
+        .setY(0)
+        .normalize();
+      duckBaseYaw = Math.atan2(-duckForward.x, -duckForward.z);
+
+      console.log(
+        '[PATOS] Direção frontal original:',
+        `${THREE.MathUtils.radToDeg(duckBaseYaw).toFixed(2)}°`
+      );
 
       // A cópia original serve apenas como molde; os avatares visíveis são clones.
       duckTemplate.visible = false;
