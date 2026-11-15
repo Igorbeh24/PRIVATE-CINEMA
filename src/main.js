@@ -2627,6 +2627,10 @@ originalScreenVisible = obj.visible;
 function enterCinema() {
   entered = true;
 
+  // No modo privado, a câmera ocupa o assento 7 (marcador CAD8).
+  // No multiplayer, cada participante continua usando o assento escolhido.
+  setCameraToSeat(7);
+
   welcome.classList.add('hidden');
   hint.classList.add('visible');
 
