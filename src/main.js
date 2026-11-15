@@ -1032,6 +1032,9 @@ function broadcastAvatarLook(force = false) {
 // Distância mínima entre a base do pato e o ponto CAD do assento.
 const DUCK_FOOT_CLEARANCE = 0.4;
 
+// Correção do eixo frontal dos patos
+const DUCK_HEADING_OFFSET = THREE.MathUtils.degToRad(90);
+
 function applyAvatarSeatTransform(avatar, seatNumber) {
   if (!avatar?.root) return;
 
