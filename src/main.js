@@ -343,7 +343,7 @@ function setCameraToSeat(seatNumber) {
   const index = Number(seatNumber) - 1;
   const pos = SEAT_POSITIONS[index];
   const seatYaw = SEAT_YAWS[index];
-  const CAMERA_EXTRA_HEIGHT = -0.03;
+  const CAMERA_EXTRA_HEIGHT = -0.01;
   const CAMERA_BACK_OFFSET = 0.05;
 
   if (pos && seatYaw !== null && seatYaw !== undefined) {
