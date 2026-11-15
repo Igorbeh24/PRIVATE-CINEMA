@@ -1033,7 +1033,7 @@ function broadcastAvatarLook(force = false) {
 const DUCK_FOOT_CLEARANCE = 0.48;
 
 // Correção do eixo frontal dos patos
-const DUCK_HEADING_OFFSET = THREE.MathUtils.degToRad(90);
+const DUCK_HEADING_OFFSET = THREE.MathUtils.degToRad(-90);
 
 function applyAvatarSeatTransform(avatar, seatNumber) {
   if (!avatar?.root) return;
