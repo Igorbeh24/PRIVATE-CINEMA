@@ -343,8 +343,8 @@ function setCameraToSeat(seatNumber) {
   const index = Number(seatNumber) - 1;
   const pos = SEAT_POSITIONS[index];
   const seatYaw = SEAT_YAWS[index];
-  const CAMERA_EXTRA_HEIGHT = 0.25;
-  const CAMERA_BACK_OFFSET = 0.35;
+  const CAMERA_EXTRA_HEIGHT = -0.1;
+  const CAMERA_BACK_OFFSET = 0.1;
 
   if (pos && seatYaw !== null && seatYaw !== undefined) {
     // A câmera fica na altura dos olhos, diretamente acima do cubo CAD.
