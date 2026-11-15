@@ -343,12 +343,19 @@ function setCameraToSeat(seatNumber) {
   const index = Number(seatNumber) - 1;
   const pos = SEAT_POSITIONS[index];
   const seatYaw = SEAT_YAWS[index];
+  const CAMERA_EXTRA_HEIGHT = 0.25;
+  const CAMERA_BACK_OFFSET = 0.35;
 
   if (pos && seatYaw !== null && seatYaw !== undefined) {
     // A câmera fica na altura dos olhos, diretamente acima do cubo CAD.
     camera.position.copy(pos);
-    camera.position.y += cameraHeightOffset;
 
+// Sobe um pouco a câmera
+camera.position.y += cameraHeightOffset + CAMERA_EXTRA_HEIGHT;
+
+// Afasta a câmera para trás, respeitando a direção da cadeira
+camera.position.x += Math.sin(seatYaw) * CAMERA_BACK_OFFSET;
+camera.position.z += Math.cos(seatYaw) * CAMERA_BACK_OFFSET;
     // A direção inicial acompanha a rotação individual do assento.
     yaw = seatYaw;
   } else {
