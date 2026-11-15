@@ -259,7 +259,6 @@ function updateSeatMarkers() {
 
 let screenMesh = null;
 let duckTemplate = null;
-let duckSeatOffset = new THREE.Vector3();
 const duckAvatars = new Map();
 const pendingDuckLooks = new Map();
 let lastAvatarLookSentAt = 0;
@@ -1029,8 +1028,11 @@ function broadcastAvatarLook(force = false) {
   });
 }
 
+// Distância mínima entre a base do pato e o ponto CAD do assento.
+const DUCK_FOOT_CLEARANCE = 0.025;
+
 function applyAvatarSeatTransform(avatar, seatNumber) {
-  if (!avatar) return;
+  if (!avatar?.root) return;
 
   const index = Number(seatNumber) - 1;
   const seat = SEAT_POSITIONS[index];
@@ -1038,24 +1040,44 @@ function applyAvatarSeatTransform(avatar, seatNumber) {
 
   if (!seat || seatYaw === null || seatYaw === undefined) return;
 
-  // Rotaciona também o deslocamento do pato em relação ao marcador-base,
-  // mantendo o personagem centralizado sobre o cubo de cada cadeira.
+  // Cada pato recebe a rotação específica do marcador CAD correspondente.
   const yawDelta = seatYaw - baseSeatYaw;
-  const offset = duckSeatOffset.clone().applyAxisAngle(
-    new THREE.Vector3(0, 1, 0),
-    yawDelta
-  );
-
-  avatar.root.position.copy(seat).add(offset);
-
-  // O modelo do pato mantém sua orientação original, recebendo a diferença
-  // angular entre o CAD2 (assento-base do modelo) e o CAD correspondente.
   const seatRotation = new THREE.Quaternion().setFromAxisAngle(
     new THREE.Vector3(0, 1, 0),
     yawDelta
   );
 
   avatar.root.quaternion.copy(seatRotation).multiply(duckBaseQuaternion);
+
+  // Não usamos mais o deslocamento da armature original: ele depende do
+  // pivô/posição de origem do GLB e era a causa de desalinhamentos.
+  // Primeiro colocamos o pivô na origem e medimos a caixa real do pato
+  // já com a rotação final aplicada.
+  avatar.root.position.set(0, 0, 0);
+  avatar.root.updateMatrixWorld(true);
+
+  const bounds = new THREE.Box3().setFromObject(avatar.root);
+
+  if (bounds.isEmpty()) {
+    console.warn('[PATOS] Não foi possível calcular os limites do avatar:', seatNumber);
+    avatar.root.position.copy(seat);
+    avatar.root.position.y += DUCK_FOOT_CLEARANCE;
+    return;
+  }
+
+  // Centro da base (entre os pés) da caixa delimitadora do personagem.
+  const footCenter = new THREE.Vector3(
+    (bounds.min.x + bounds.max.x) * 0.5,
+    bounds.min.y,
+    (bounds.min.z + bounds.max.z) * 0.5
+  );
+
+  const targetFootPosition = seat.clone();
+  targetFootPosition.y += DUCK_FOOT_CLEARANCE;
+
+  // Translada o pato até que a base fique exatamente sobre o CAD.
+  avatar.root.position.copy(targetFootPosition).sub(footCenter);
+  avatar.root.updateMatrixWorld(true);
 }
 
 function updateDuckVisibility() {
@@ -2503,14 +2525,11 @@ originalScreenVisible = obj.visible;
     if (duckTemplate) {
       duckTemplate.updateWorldMatrix(true, true);
 
-      const templateWorldPosition = new THREE.Vector3();
       const templateWorldQuaternion = new THREE.Quaternion();
-      duckTemplate.getWorldPosition(templateWorldPosition);
       duckTemplate.getWorldQuaternion(templateWorldQuaternion);
 
-      if (SEAT_POSITIONS[0]) {
-        duckSeatOffset.copy(templateWorldPosition).sub(SEAT_POSITIONS[0]);
-      }
+      // Os clones são adicionados diretamente à cena; portanto guardamos
+      // a orientação global original da armature, não sua posição de origem.
       duckBaseQuaternion.copy(templateWorldQuaternion);
 
       // A cópia original serve apenas como molde; os avatares visíveis são clones.
@@ -2523,7 +2542,6 @@ originalScreenVisible = obj.visible;
 
       console.log('[PATOS] Armature encontrada:', duckTemplate.name);
       console.log('[PATOS] Ossos exportados:', exportedBones);
-      console.log('[PATOS] Deslocamento em relação ao CAD2:', duckSeatOffset);
 
       syncDuckAvatars();
     } else {
