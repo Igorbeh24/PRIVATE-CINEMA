@@ -1047,7 +1047,7 @@ function applyAvatarSeatTransform(avatar, seatNumber) {
   // A frente original do pato é o eixo local +X da armature.
   // duckBaseYaw é calculado a partir da rotação real do modelo no GLB,
   // em vez de presumir que o pato já está alinhado com o CAD2.
-  const yawDelta = seatYaw - duckBaseYaw;
+  const yawDelta = seatYaw - duckBaseYaw + DUCK_HEADING_OFFSET;
   const seatRotation = new THREE.Quaternion().setFromAxisAngle(
     new THREE.Vector3(0, 1, 0),
     yawDelta
